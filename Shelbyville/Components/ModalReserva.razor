@@ -1,0 +1,167 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.BookOnline" Color="Color.Info" />
+            <MudText Typo="Typo.h6" Class="font-heading">
+                Nueva Reserva de Mesa de Billar
+            </MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-4 py-2">
+            <!-- Mesa a Reservar -->
+            <MudSelect T="Guid" Label="Seleccionar Mesa" @bind-Value="_mesaId" Required="true" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var m in MesasDisponibles)
+                {
+                    <MudSelectItem T="Guid" Value="@m.Id">
+                        Mesa @m.Numero - @m.Nombre (@m.Tipo) @(m.Estado == "ocupada" ? "⚠️ En Juego actual" : "✓ Libre")
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <!-- Datos del Cliente -->
+            <div class="d-flex gap-3">
+                <MudTextField @bind-Value="_clienteNombre" Label="Nombre del Cliente" Placeholder="Ej. Roberto Gómez" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" />
+                <MudTextField @bind-Value="_telefono" Label="Teléfono / WhatsApp" Placeholder="Ej. 70012345" Variant="Variant.Outlined" Style="max-width: 170px;" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Phone" />
+            </div>
+
+            <!-- Fecha y Rango de Horas -->
+            <div class="d-flex gap-3 align-center">
+                <MudDatePicker @bind-Date="_fecha" Label="Fecha de la Reserva" DateFormat="dd/MM/yyyy" Variant="Variant.Outlined" Class="flex-grow-1" MinDate="DateTime.Today" />
+            </div>
+
+            <div class="d-flex gap-3">
+                <MudTimePicker @bind-Time="_horaInicio" Label="Hora de Inicio" Variant="Variant.Outlined" Class="flex-grow-1" AmPm="true" />
+                <MudTimePicker @bind-Time="_horaFin" Label="Hora Estimada de Fin" Variant="Variant.Outlined" Class="flex-grow-1" AmPm="true" />
+            </div>
+
+            <!-- Tolerancia de llegada con Auto-Liberación -->
+            <div class="pa-3" style="background: rgba(56, 189, 248, 0.08); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                <div class="d-flex justify-space-between align-center mb-1">
+                    <span style="font-weight: 700; color: #38BDF8; font-size: 13px;">
+                        ⏱️ Tolerancia de Llegada (Auto-Liberación)
+                    </span>
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">
+                        @_toleranciaMinutos min
+                    </MudChip>
+                </div>
+                <MudNumericField @bind-Value="_toleranciaMinutos" Label="Minutos de Espera de Tolerancia" Min="5" Max="60" Step="5" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                    Si el cliente no se presenta dentro de este margen o si vence la hora reservada, el sistema liberará automáticamente la mesa para otros clientes.
+                </div>
+            </div>
+
+            <MudTextField @bind-Value="_notas" Label="Notas adicionales / Requerimientos" Placeholder="Ej. Viene con grupo de 4 amigos para torneo amistoso" Lines="2" Variant="Variant.Outlined" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Info" Variant="Variant.Filled" OnClick="GuardarAsync" Disabled="_procesando" Class="btn-touch" Style="background: #0284C7; color: #FFFFFF; font-weight: 700;">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Registrando...</span>
+            }
+            else
+            {
+                <span>Confirmar Reserva</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public List<MesaModel> Mesas { get; set; } = new();
+
+    [Parameter]
+    public MesaModel? MesaPreseleccionada { get; set; }
+
+    private IEnumerable<MesaModel> MesasDisponibles => Mesas.Where(m => m.Activa);
+
+    private Guid _mesaId;
+    private string _clienteNombre = string.Empty;
+    private string? _telefono;
+    private DateTime? _fecha = DateTime.Today;
+    private TimeSpan? _horaInicio;
+    private TimeSpan? _horaFin;
+    private int _toleranciaMinutos = 15;
+    private string? _notas;
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        if (MesaPreseleccionada != null)
+        {
+            _mesaId = MesaPreseleccionada.Id;
+        }
+        else
+        {
+            _mesaId = MesasDisponibles.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+
+        var ahora = DateTime.Now;
+        _horaInicio = new TimeSpan(ahora.Hour, (ahora.Minute / 15) * 15, 0).Add(TimeSpan.FromMinutes(15));
+        _horaFin = _horaInicio.Value.Add(TimeSpan.FromHours(1));
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task GuardarAsync()
+    {
+        if (_mesaId == Guid.Empty)
+        {
+            Snackbar.Add("Debe seleccionar una mesa para la reserva", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_clienteNombre))
+        {
+            Snackbar.Add("El nombre del cliente es obligatorio", Severity.Warning);
+            return;
+        }
+
+        if (!_fecha.HasValue || !_horaInicio.HasValue || !_horaFin.HasValue)
+        {
+            Snackbar.Add("Debe definir la fecha, hora de inicio y fin de la reserva", Severity.Warning);
+            return;
+        }
+
+        if (_horaFin <= _horaInicio)
+        {
+            Snackbar.Add("La hora de fin debe ser posterior a la hora de inicio", Severity.Warning);
+            return;
+        }
+
+        _procesando = true;
+
+        var exito = await Supabase.CrearReservaMesaAsync(
+            _mesaId,
+            _clienteNombre,
+            _telefono,
+            _fecha.Value,
+            _horaInicio.Value,
+            _horaFin.Value,
+            _toleranciaMinutos,
+            _notas
+        );
+
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add($"Mesa reservada exitosamente para {_clienteNombre}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al registrar la reserva en el sistema", Severity.Error);
+        }
+    }
+}

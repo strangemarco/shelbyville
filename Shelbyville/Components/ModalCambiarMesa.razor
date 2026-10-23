@@ -1,0 +1,84 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Color="Color.Info" />
+            <MudText Typo="Typo.h6" Class="font-heading">Cambiar Mesa @MesaOrigen.Numero a otra Mesa</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-3 py-2">
+            <MudText Typo="Typo.body2" Style="color: var(--text-secondary);">
+                Selecciona la nueva mesa destino disponible para transferir la sesión activa y los consumos:
+            </MudText>
+
+            <MudSelect T="Guid?" Label="Mesa Destino Disponible" @bind-Value="_mesaDestinoId" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var m in MesasDisponibles)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">
+                        Mesa @m.Numero - @m.Nombre (@m.Tipo)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_motivo" Label="Motivo del cambio" Variant="Variant.Outlined" Placeholder="Ej. Cliente solicitó mesa con mejor iluminación" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Info" Variant="Variant.Filled" OnClick="ConfirmarCambio" Disabled="_mesaDestinoId == null || _procesando" Class="btn-touch">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Transfiriendo...</span>
+            }
+            else
+            {
+                <span>Confirmar Cambio</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public MesaModel MesaOrigen { get; set; } = default!;
+
+    [Parameter]
+    public List<MesaModel> MesasDisponibles { get; set; } = new();
+
+    private Guid? _mesaDestinoId;
+    private string _motivo = "Cambio solicitado por el cliente";
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        _mesaDestinoId = MesasDisponibles.FirstOrDefault()?.Id;
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task ConfirmarCambio()
+    {
+        if (MesaOrigen.SesionActiva == null || _mesaDestinoId == null) return;
+
+        _procesando = true;
+        var exito = await Supabase.CambiarMesaAsync(MesaOrigen.SesionActiva.Id, _mesaDestinoId.Value, _motivo);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add($"Sesión transferida exitosamente a la nueva mesa", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al cambiar de mesa", Severity.Error);
+        }
+    }
+}

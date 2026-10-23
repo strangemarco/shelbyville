@@ -1,0 +1,180 @@
+@page "/productos"
+@inject SupabaseService Supabase
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<div class="d-flex flex-column gap-4">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold);">
+                PRODUCTOS Y BEBIDAS
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Catálogo de artículos, precios de venta y control de stock de barra.
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-center">
+            <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Category" OnClick="@(() => Navigation.NavigateTo("/categorias"))">
+                Categorías
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.AddBox" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" OnClick="AbrirModalNuevoProducto">
+                + Nuevo Producto
+            </MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarProductosAsync" />
+        </div>
+    </div>
+
+    <!-- Filtros y Búsqueda -->
+    <div class="shelby-card pa-4" style="background: var(--bg-surface);">
+        <div class="d-flex flex-column flex-sm-row gap-3">
+            <MudTextField @bind-Value="_busqueda" Placeholder="Buscar por nombre, descripción o código..." Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="flex-grow-1" />
+            <MudSelect T="Guid?" @bind-Value="_categoriaFiltro" Label="Categoría" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 200px;">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">Todas las Categorías</MudSelectItem>
+                @foreach (var cat in _categorias)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)cat.Id)">@cat.Nombre</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- Tabla de Productos -->
+        <MudTable Items="ProductosFiltrados" Dense="true" Hover="true" Elevation="1" Class="shelby-card" Style="background: var(--bg-surface);">
+            <HeaderContent>
+                <MudTh>Código</MudTh>
+                <MudTh>Artículo</MudTh>
+                <MudTh>Categoría</MudTh>
+                <MudTh Style="text-align: right;">P. Compra</MudTh>
+                <MudTh Style="text-align: right;">P. Venta</MudTh>
+                <MudTh Style="text-align: center;">Stock</MudTh>
+                <MudTh Style="text-align: center;">Estado</MudTh>
+                <MudTh Style="text-align: center;">Acción</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Código" Style="color: var(--text-secondary); font-family: monospace;">
+                    @(context.Codigo ?? "-")
+                </MudTd>
+                <MudTd DataLabel="Artículo">
+                    <div style="font-weight: 600; color: var(--text-primary);">@context.Nombre</div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">@context.Descripcion</div>
+                </MudTd>
+                <MudTd DataLabel="Categoría">
+                    @{
+                        var cat = _categorias.FirstOrDefault(c => c.Id == context.CategoriaId);
+                    }
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="border-color: var(--border-color); color: var(--text-secondary);">
+                        @(cat?.Nombre ?? "General")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="P. Compra" Style="text-align: right;" Class="tabular-nums">
+                    Bs. @context.PrecioCompra.ToString("N2")
+                </MudTd>
+                <MudTd DataLabel="P. Venta" Style="text-align: right; font-weight: 700; font-size: 15px;" Class="tabular-nums font-heading text-gold">
+                    Bs. @context.PrecioVenta.ToString("N2")
+                </MudTd>
+                <MudTd DataLabel="Stock" Style="text-align: center;">
+                    @if (context.Stock <= 0)
+                    {
+                        <span class="px-2 py-1" style="background: rgba(239, 68, 68, 0.2); color: var(--status-ocupada); border-radius: 6px; font-weight: 700; font-size: 12px;">
+                            0 (Agotado)
+                        </span>
+                    }
+                    else if (context.StockBajo)
+                    {
+                        <span class="px-2 py-1" style="background: rgba(245, 158, 11, 0.2); color: var(--status-pausada); border-radius: 6px; font-weight: 700; font-size: 12px;">
+                            @context.Stock u. (Bajo)
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="px-2 py-1" style="background: rgba(34, 197, 94, 0.2); color: var(--status-disponible); border-radius: 6px; font-weight: 700; font-size: 12px;">
+                            @context.Stock u.
+                        </span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Estado" Style="text-align: center;">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.Activo ? Color.Success : Color.Default)" Variant="Variant.Text">
+                        @(context.Activo ? "Activo" : "Inactivo")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Acción" Style="text-align: center;">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Tertiary" OnClick="@(() => AbrirModalEditarProducto(context))" />
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 8, 15, 25, 50, 100 }"
+                               RowsPerPageString="Filas por página:"
+                               InfoFormat="{first_item}-{last_item} de {all_items}"
+                               AllItemsText="Todos" />
+            </PagerContent>
+        </MudTable>
+    }
+</div>
+
+@code {
+    private List<ProductoModel> _productos = new();
+    private List<CategoriaModel> _categorias = new();
+    private string _busqueda = string.Empty;
+    private Guid? _categoriaFiltro;
+    private bool _cargando = true;
+
+    private IEnumerable<ProductoModel> ProductosFiltrados =>
+        _productos.Where(p =>
+            (!_categoriaFiltro.HasValue || p.CategoriaId == _categoriaFiltro.Value) &&
+            (string.IsNullOrWhiteSpace(_busqueda) || p.Nombre.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) || (p.Codigo != null && p.Codigo.Contains(_busqueda, StringComparison.OrdinalIgnoreCase)))
+        );
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProductosAsync();
+    }
+
+    private async Task CargarProductosAsync()
+    {
+        _cargando = true;
+        _productos = await Supabase.GetProductosAsync();
+        _categorias = await Supabase.GetCategoriasAsync();
+        _cargando = false;
+    }
+
+    private async Task AbrirModalNuevoProducto()
+    {
+        var parameters = new DialogParameters<ModalProducto>
+        {
+            { x => x.Categorias, _categorias }
+        };
+
+        var dialog = await DialogService.ShowAsync<ModalProducto>("Nuevo Producto", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarProductosAsync();
+        }
+    }
+
+    private async Task AbrirModalEditarProducto(ProductoModel producto)
+    {
+        var parameters = new DialogParameters<ModalProducto>
+        {
+            { x => x.Producto, producto },
+            { x => x.Categorias, _categorias }
+        };
+
+        var dialog = await DialogService.ShowAsync<ModalProducto>("Editar Producto", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarProductosAsync();
+        }
+    }
+}

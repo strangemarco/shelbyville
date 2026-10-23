@@ -1,0 +1,547 @@
+@page "/pos"
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<div class="d-flex flex-column gap-4">
+    <!-- Header -->
+    <div class="d-flex justify-space-between align-center">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold);">
+                PUNTO DE VENTA (POS)
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Venta directa en barra o carga inmediata de bebidas y snacks a mesas activas.
+            </p>
+        </div>
+        <div>
+            @if (_cajaAbierta != null)
+            {
+                <MudChip T="string" Color="Color.Success" Variant="Variant.Filled" Size="Size.Small">
+                    Caja: @_cajaAbierta.Nombre
+                </MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Color="Color.Error" Variant="Variant.Filled" Size="Size.Small">
+                    Caja Cerrada (Abre caja para registrar cobros)
+                </MudChip>
+            }
+        </div>
+    </div>
+
+    <!-- POS Content -->
+    <MudGrid Spacing="3">
+        <!-- Catálogo de Productos (Izquierda) -->
+        <MudItem xs="12" lg="8">
+            <div class="shelby-card pa-4 d-flex flex-column gap-3">
+                <!-- Buscador y Tabs de Categorías -->
+                <div class="d-flex flex-column flex-sm-row gap-3">
+                    <MudTextField @bind-Value="_busqueda" Placeholder="Buscar por nombre o código..." Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="flex-grow-1" />
+                    <MudSelect T="Guid?" @bind-Value="_categoriaSeleccionadaId" Label="Categoría" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 180px;">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Todas las categorías</MudSelectItem>
+                        @foreach (var cat in _categorias)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)cat.Id)">@cat.Nombre</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+
+                <!-- Grilla de Productos -->
+                <div style="max-height: 600px; overflow-y: auto;">
+                    <MudGrid Spacing="2">
+                        @foreach (var prod in ProductosFiltrados)
+                        {
+                            var sinStock = prod.Stock <= 0;
+                            <MudItem xs="6" sm="4" md="3">
+                                <div class="shelby-card pa-3 cursor-pointer d-flex flex-column justify-space-between h-100"
+                                     style="background: var(--bg-surface); opacity: @(sinStock ? "0.5" : "1"); border: 1px solid var(--border-color); min-height: 120px;"
+                                     @onclick="@(() => AgregarAlCarrito(prod))">
+                                    <div>
+                                        <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); line-height: 1.2;">
+                                            @prod.Nombre
+                                        </div>
+                                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                                            Stock: @prod.Stock u.
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-space-between align-center mt-3">
+                                        <span class="font-heading text-gold tabular-nums" style="font-weight: 800; font-size: 16px;">
+                                            Bs. @prod.PrecioVenta.ToString("N2")
+                                        </span>
+                                        <MudIconButton Icon="@Icons.Material.Filled.AddShoppingCart" Size="Size.Small" Color="Color.Tertiary" Disabled="sinStock" />
+                                    </div>
+                                </div>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </div>
+            </div>
+        </MudItem>
+
+        <!-- Carrito y Cobro (Derecha) -->
+        <MudItem xs="12" lg="4">
+            <div class="shelby-card pa-4 d-flex flex-column gap-3 h-100" style="background: var(--bg-surface); border: 2px solid var(--border-color);">
+                <div class="d-flex justify-space-between align-center pb-2" style="border-bottom: 1px solid var(--border-color);">
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Color="Color.Tertiary" />
+                        <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">ORDEN ACTUAL</span>
+                    </div>
+                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" OnClick="LimpiarCarrito" Disabled="!_carrito.Any()">
+                        Vaciar
+                    </MudButton>
+                </div>
+
+                <!-- Destino: Venta mostrador o mesa -->
+                <MudSelect T="Guid?" Label="Destino de la Venta" @bind-Value="_mesaDestinoId" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">Venta Directa de Mostrador</MudSelectItem>
+                    @foreach (var m in _mesasActivas)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">
+                            Cargar a Mesa @m.Numero (@(m.SesionActiva?.ClienteNombre ?? "En Juego"))
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_mesaDestinoId == null)
+                {
+                    <MudTextField @bind-Value="_clienteNombre" Label="Nombre del Cliente" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Cliente Barra" />
+                }
+
+                <!-- Items del Carrito -->
+                <div class="flex-grow-1" style="max-height: 250px; overflow-y: auto;">
+                    @if (!_carrito.Any())
+                    {
+                        <div class="pa-6 text-center" style="color: var(--text-muted); font-size: 13px;">
+                            Selecciona productos del catálogo para agregar a la orden.
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var item in _carrito)
+                        {
+                            <div class="d-flex justify-space-between align-center pa-2 mb-2" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                                <div style="max-width: 130px;">
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                        @item.Producto.Nombre
+                                    </div>
+                                    <div style="font-size: 11px; color: var(--text-secondary);">
+                                        Bs. @item.Producto.PrecioVenta.ToString("N2") c/u
+                                    </div>
+                                </div>
+                                <div class="d-flex align-center gap-1">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="@(() => DisminuirCantidad(item))" />
+                                    <span style="font-weight: 700; font-size: 14px; min-width: 20px; text-align: center;">@item.Cantidad</span>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => AumentarCantidad(item))" Disabled="item.Cantidad >= item.Producto.Stock" />
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-heading text-gold tabular-nums" style="font-weight: 700; font-size: 14px;">
+                                        Bs. @((item.Cantidad * item.Producto.PrecioVenta).ToString("N2"))
+                                    </div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => _carrito.Remove(item))" />
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <!-- Resumen y Totales -->
+                <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div class="d-flex justify-space-between" style="font-size: 12px; color: var(--text-secondary);">
+                        <span>Subtotal:</span>
+                        <span class="tabular-nums" style="font-weight: 600;">Bs. @SubtotalCarrito.ToString("N2")</span>
+                    </div>
+                    <div class="d-flex justify-space-between align-center mt-2">
+                        <span style="font-size: 12px; color: var(--text-secondary);">Descuento:</span>
+                        <MudNumericField T="decimal" Value="_descuento" ValueChanged="OnDescuentoChanged" Format="N2" Min="0" Max="@SubtotalCarrito" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 145px; min-width: 140px;" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <div class="d-flex justify-space-between align-center">
+                        <span class="font-heading" style="font-weight: 700; font-size: 15px; color: var(--text-primary);">TOTAL:</span>
+                        <span class="font-heading text-gold tabular-nums" style="font-weight: 800; font-size: 22px;">Bs. @TotalFinal.ToString("N2")</span>
+                    </div>
+                </div>
+
+                <!-- Método de Pago si es Venta Directa -->
+                @if (_mesaDestinoId == null)
+                {
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="@(_metodoPago == "efectivo" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => SeleccionarMetodoPago("efectivo"))" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.Payments">
+                            Efectivo
+                        </MudButton>
+                        <MudButton Variant="@(_metodoPago == "qr" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => SeleccionarMetodoPago("qr"))" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.QrCode2">
+                            QR
+                        </MudButton>
+                        <MudButton Variant="@(_metodoPago == "mixto" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => SeleccionarMetodoPago("mixto"))" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.CallSplit">
+                            Mixto (Efe+QR)
+                        </MudButton>
+                    </div>
+
+                    @if (_metodoPago == "efectivo")
+                    {
+                        <div class="d-flex gap-2 align-center mt-2">
+                            <MudNumericField T="decimal?" @bind-Value="_efectivoRecibido" Label="Efectivo Recibido" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                            <div class="pa-2 px-3 text-center flex-grow-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 6px;">
+                                <div style="font-size: 10px; color: var(--text-secondary);">Cambio / Vuelto:</div>
+                                <div class="tabular-nums" style="font-weight: 700; font-size: 14px; color: @((_efectivoRecibido ?? TotalFinal) >= TotalFinal ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                                    Bs. @(Math.Max(0, (_efectivoRecibido ?? TotalFinal) - TotalFinal).ToString("N2"))
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else if (_metodoPago == "mixto")
+                    {
+                        <div class="pa-3 mt-2" style="background: var(--bg-surface); border: 1px solid var(--color-gold); border-radius: 8px;">
+                            <div class="d-flex justify-space-between align-center mb-2">
+                                <span style="font-size: 11px; font-weight: 700; color: var(--color-gold); text-transform: uppercase;">
+                                    <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                                    Desglose Pago Mixto
+                                </span>
+                                <span style="font-size: 11px; color: var(--text-secondary);">
+                                    Total: <b>Bs. @TotalFinal.ToString("N2")</b>
+                                </span>
+                            </div>
+
+                            <div class="d-flex gap-2 mb-2">
+                                <MudNumericField T="decimal" Value="_montoEfectivoMixto" ValueChanged="OnMontoEfectivoMixtoChanged" Label="Parte Efectivo" Format="N2" Min="0" Max="@TotalFinal" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                                <MudNumericField T="decimal" Value="_montoQrMixto" ValueChanged="OnMontoQrMixtoChanged" Label="Parte QR" Format="N2" Min="0" Max="@TotalFinal" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                            </div>
+
+                            <div class="d-flex gap-2 align-center">
+                                <MudNumericField T="decimal?" @bind-Value="_efectivoRecibidoMixto" Label="Efectivo Entregado" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                                <div class="pa-2 px-3 text-center flex-grow-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 6px;">
+                                    <div style="font-size: 10px; color: var(--text-secondary);">Cambio (Efectivo):</div>
+                                    <div class="tabular-nums" style="font-weight: 700; font-size: 14px; color: @(CambioMixtoCalculado >= 0 ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                                        Bs. @Math.Max(0, CambioMixtoCalculado).ToString("N2")
+                                    </div>
+                                </div>
+                            </div>
+
+                            @if (Math.Round(_montoEfectivoMixto + _montoQrMixto, 2) != TotalFinal)
+                            {
+                                <div class="mt-2 pa-1 px-2" style="background: rgba(239, 68, 68, 0.1); border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                                    <span style="font-size: 11px; color: var(--status-ocupada);">
+                                        La suma (Bs. @((_montoEfectivoMixto + _montoQrMixto).ToString("N2"))) debe ser igual a Bs. @TotalFinal.ToString("N2")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+
+                <!-- Botón de Acción Principal -->
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" FullWidth="true" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" Disabled="@BotonAccionDeshabilitado" OnClick="ProcesarOrden">
+                    @if (_procesando)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Procesando...</span>
+                    }
+                    else if (_mesaDestinoId != null)
+                    {
+                        <span>Cargar a Mesa Seleccionada</span>
+                    }
+                    else
+                    {
+                        <span>Cobrar Venta Directa (Bs. @TotalFinal.ToString("N2"))</span>
+                    }
+                </MudButton>
+            </div>
+        </MudItem>
+    </MudGrid>
+</div>
+
+@code {
+    private List<ProductoModel> _productos = new();
+    private List<CategoriaModel> _categorias = new();
+    private List<MesaModel> _mesasActivas = new();
+    private CajaModel? _cajaAbierta;
+
+    private string _busqueda = string.Empty;
+    private Guid? _categoriaSeleccionadaId;
+    private Guid? _mesaDestinoId;
+    private string _clienteNombre = "Cliente Barra";
+    private string _metodoPago = "efectivo";
+    private decimal _descuento = 0.00m;
+    private bool _procesando;
+
+    private decimal _montoEfectivoMixto = 0.00m;
+    private decimal _montoQrMixto = 0.00m;
+    private decimal? _efectivoRecibidoMixto;
+    private decimal? _efectivoRecibido;
+
+    private decimal CambioMixtoCalculado => (_efectivoRecibidoMixto ?? _montoEfectivoMixto) - _montoEfectivoMixto;
+
+    private bool BotonAccionDeshabilitado =>
+        !_carrito.Any() || 
+        _procesando || 
+        (_mesaDestinoId == null && _cajaAbierta == null) ||
+        (_mesaDestinoId == null && _metodoPago == "efectivo" && _efectivoRecibido.HasValue && _efectivoRecibido.Value < TotalFinal) ||
+        (_mesaDestinoId == null && _metodoPago == "mixto" && (
+            Math.Round(_montoEfectivoMixto + _montoQrMixto, 2) != TotalFinal ||
+            (_efectivoRecibidoMixto.HasValue && _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+        ));
+
+    private List<CartItem> _carrito = new();
+
+    private class CartItem
+    {
+        public ProductoModel Producto { get; set; } = default!;
+        public int Cantidad { get; set; }
+    }
+
+    private decimal SubtotalCarrito => _carrito.Sum(i => i.Cantidad * i.Producto.PrecioVenta);
+    private decimal TotalFinal => Math.Max(0.00m, SubtotalCarrito - _descuento);
+
+    private IEnumerable<ProductoModel> ProductosFiltrados =>
+        _productos.Where(p =>
+            p.Activo &&
+            (!_categoriaSeleccionadaId.HasValue || p.CategoriaId == _categoriaSeleccionadaId.Value) &&
+            (string.IsNullOrWhiteSpace(_busqueda) || p.Nombre.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) || (p.Codigo != null && p.Codigo.Contains(_busqueda, StringComparison.OrdinalIgnoreCase)))
+        );
+
+    protected override async Task OnInitializedAsync()
+    {
+        _productos = await Supabase.GetProductosAsync();
+        _categorias = await Supabase.GetCategoriasAsync();
+        _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
+
+        var todasMesas = await Supabase.GetMesasAsync();
+        _mesasActivas = todasMesas.Where(m => m.Estado == "ocupada" || m.Estado == "pausada").ToList();
+    }
+
+    private void SeleccionarMetodoPago(string metodo)
+    {
+        _metodoPago = metodo;
+        if (_metodoPago == "mixto")
+        {
+            if (_montoEfectivoMixto == 0 && _montoQrMixto == 0)
+            {
+                _montoEfectivoMixto = Math.Round(TotalFinal / 2m, 2);
+                _montoQrMixto = TotalFinal - _montoEfectivoMixto;
+            }
+            else if (_montoEfectivoMixto + _montoQrMixto != TotalFinal)
+            {
+                if (_montoEfectivoMixto <= TotalFinal)
+                {
+                    _montoQrMixto = TotalFinal - _montoEfectivoMixto;
+                }
+                else
+                {
+                    _montoEfectivoMixto = TotalFinal;
+                    _montoQrMixto = 0;
+                }
+            }
+            _efectivoRecibidoMixto = _montoEfectivoMixto;
+        }
+        else if (_metodoPago == "efectivo")
+        {
+            _efectivoRecibido = TotalFinal;
+        }
+    }
+
+    private void OnDescuentoChanged(decimal nuevoDescuento)
+    {
+        _descuento = nuevoDescuento;
+        AjustarTotalesMixto();
+    }
+
+    private void OnMontoEfectivoMixtoChanged(decimal nuevoEfectivo)
+    {
+        _montoEfectivoMixto = Math.Max(0, nuevoEfectivo);
+        if (_montoEfectivoMixto > TotalFinal)
+        {
+            _montoEfectivoMixto = TotalFinal;
+        }
+        _montoQrMixto = Math.Max(0, TotalFinal - _montoEfectivoMixto);
+        if (!_efectivoRecibidoMixto.HasValue || _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+        {
+            _efectivoRecibidoMixto = _montoEfectivoMixto;
+        }
+    }
+
+    private void OnMontoQrMixtoChanged(decimal nuevoQr)
+    {
+        _montoQrMixto = Math.Max(0, nuevoQr);
+        if (_montoQrMixto > TotalFinal)
+        {
+            _montoQrMixto = TotalFinal;
+        }
+        _montoEfectivoMixto = Math.Max(0, TotalFinal - _montoQrMixto);
+        if (!_efectivoRecibidoMixto.HasValue || _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+        {
+            _efectivoRecibidoMixto = _montoEfectivoMixto;
+        }
+    }
+
+    private void AjustarTotalesMixto()
+    {
+        if (_metodoPago == "mixto")
+        {
+            if (_montoEfectivoMixto > TotalFinal)
+            {
+                _montoEfectivoMixto = TotalFinal;
+            }
+            _montoQrMixto = Math.Max(0, TotalFinal - _montoEfectivoMixto);
+            if (!_efectivoRecibidoMixto.HasValue || _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+            {
+                _efectivoRecibidoMixto = _montoEfectivoMixto;
+            }
+        }
+        else if (_metodoPago == "efectivo")
+        {
+            if (!_efectivoRecibido.HasValue || _efectivoRecibido.Value < TotalFinal)
+            {
+                _efectivoRecibido = TotalFinal;
+            }
+        }
+    }
+
+    private void AgregarAlCarrito(ProductoModel prod)
+    {
+        if (prod.Stock <= 0)
+        {
+            Snackbar.Add("Producto sin stock disponible", Severity.Warning);
+            return;
+        }
+
+        var item = _carrito.FirstOrDefault(i => i.Producto.Id == prod.Id);
+        if (item != null)
+        {
+            if (item.Cantidad < prod.Stock)
+                item.Cantidad++;
+            else
+                Snackbar.Add("No hay más existencias disponibles", Severity.Warning);
+        }
+        else
+        {
+            _carrito.Add(new CartItem { Producto = prod, Cantidad = 1 });
+        }
+        AjustarTotalesMixto();
+    }
+
+    private void AumentarCantidad(CartItem item)
+    {
+        if (item.Cantidad < item.Producto.Stock)
+        {
+            item.Cantidad++;
+            AjustarTotalesMixto();
+        }
+    }
+
+    private void DisminuirCantidad(CartItem item)
+    {
+        if (item.Cantidad > 1)
+            item.Cantidad--;
+        else
+            _carrito.Remove(item);
+
+        AjustarTotalesMixto();
+    }
+
+    private void LimpiarCarrito()
+    {
+        _carrito.Clear();
+        _descuento = 0;
+        _montoEfectivoMixto = 0;
+        _montoQrMixto = 0;
+        _efectivoRecibidoMixto = null;
+        _efectivoRecibido = null;
+    }
+
+    private async Task ProcesarOrden()
+    {
+        if (!_carrito.Any()) return;
+
+        _procesando = true;
+
+        if (_mesaDestinoId != null)
+        {
+            // Cargar a mesa activa
+            var mesa = _mesasActivas.FirstOrDefault(m => m.Id == _mesaDestinoId.Value);
+            if (mesa?.SesionActiva != null)
+            {
+                bool todoBien = true;
+                foreach (var item in _carrito)
+                {
+                    var res = await Supabase.AgregarConsumoMesaAsync(mesa.SesionActiva.Id, item.Producto.Id, item.Cantidad);
+                    if (!res) todoBien = false;
+                }
+
+                if (todoBien)
+                {
+                    Snackbar.Add($"Consumos cargados con éxito a Mesa {mesa.Numero}", Severity.Success);
+                    LimpiarCarrito();
+                    _productos = await Supabase.GetProductosAsync();
+                }
+                else
+                {
+                    Snackbar.Add("Hubo inconvenientes al cargar algunos consumos", Severity.Error);
+                }
+            }
+        }
+        else
+        {
+            // Venta directa POS
+            if (_cajaAbierta == null)
+            {
+                Snackbar.Add("Debes abrir caja para procesar ventas directas", Severity.Error);
+                _procesando = false;
+                return;
+            }
+
+            var itemsPayload = _carrito.Select(c => new
+            {
+                producto_id = c.Producto.Id,
+                cantidad = c.Cantidad
+            }).Cast<object>().ToList();
+
+            string? refPayload = null;
+            decimal? montoRecibido = null;
+
+            if (_metodoPago == "mixto")
+            {
+                montoRecibido = _efectivoRecibidoMixto ?? _montoEfectivoMixto;
+                var mixtoObj = new
+                {
+                    monto_efectivo = _montoEfectivoMixto,
+                    monto_qr = _montoQrMixto,
+                    efectivo_recibido = montoRecibido,
+                    referencia_qr = "Venta Mostrador Mixta"
+                };
+                refPayload = System.Text.Json.JsonSerializer.Serialize(mixtoObj);
+            }
+            else if (_metodoPago == "efectivo")
+            {
+                montoRecibido = _efectivoRecibido ?? TotalFinal;
+            }
+            else
+            {
+                montoRecibido = TotalFinal;
+            }
+
+            var (exito, errorMsg) = await Supabase.VentaDirectaPosAsync(
+                _cajaAbierta.Id,
+                _clienteNombre,
+                itemsPayload,
+                _metodoPago,
+                montoRecibido,
+                _descuento,
+                refPayload
+            );
+
+            if (exito)
+            {
+                Snackbar.Add("Venta directa completada con éxito", Severity.Success);
+                LimpiarCarrito();
+                _productos = await Supabase.GetProductosAsync();
+                _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
+            }
+            else
+            {
+                var msg = string.IsNullOrWhiteSpace(errorMsg) ? "Error al procesar la venta directa" : $"Error al procesar venta: {errorMsg}";
+                Snackbar.Add(msg, Severity.Error);
+            }
+        }
+
+        _procesando = false;
+    }
+}

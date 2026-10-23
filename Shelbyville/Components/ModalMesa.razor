@@ -1,0 +1,142 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.SportsScore" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">
+                @(_esNuevo ? "Nueva Mesa de Billar" : $"Editar Mesa {Mesa?.Numero}")
+            </MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-4 py-2">
+            <div class="d-flex gap-3">
+                <MudNumericField @bind-Value="_numero" Label="Número de Mesa" Min="1" Max="99" Required="true" Variant="Variant.Outlined" Style="max-width: 130px;" />
+                <MudTextField @bind-Value="_nombre" Label="Nombre descriptivo" Placeholder="Ej. Mesa 1 - Pool Clásica" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" />
+            </div>
+
+            <div class="d-flex gap-3">
+                <MudSelect T="string" Label="Tipo de Mesa" @bind-Value="_tipo" Variant="Variant.Outlined" Class="flex-grow-1">
+                    <MudSelectItem T="string" Value="@("Pool")">Pool (Bola 8 / 9)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Carambola")">Carambola (3 Bandas)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Snooker")">Snooker Profesional</MudSelectItem>
+                </MudSelect>
+
+                <MudSelect T="Guid?" Label="Tarifa por Defecto" @bind-Value="_tarifaDefectoId" Variant="Variant.Outlined" Class="flex-grow-1">
+                    @foreach (var t in Tarifas)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)t.Id)">
+                            @t.Nombre (Bs. @t.PrecioPorHora.ToString("N2")/hr)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+
+            <div class="d-flex justify-space-between align-center pa-3" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                <div>
+                    <div style="font-weight: 600; color: var(--text-primary); font-size: 14px;">Estado Operativo de la Mesa</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">
+                        Si está en mantenimiento, no se podrá iniciar juego en ella.
+                    </div>
+                </div>
+                <MudSelect T="string" @bind-Value="_estado" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 160px;">
+                    <MudSelectItem T="string" Value="@("disponible")">Disponible</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("mantenimiento")">Mantenimiento</MudSelectItem>
+                </MudSelect>
+            </div>
+
+            <MudSwitch @bind-Value="_activa" Color="Color.Success">
+                <span style="font-size: 14px; font-weight: 600; color: @(_activa ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                    @(_activa ? "Mesa Habilitada (En Servicio)" : "Mesa Dada de Baja (Oculta)")
+                </span>
+            </MudSwitch>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="GuardarAsync" Disabled="_procesando" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Guardando...</span>
+            }
+            else
+            {
+                <span>@(_esNuevo ? "Crear Mesa" : "Guardar Cambios")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public MesaModel? Mesa { get; set; }
+
+    [Parameter]
+    public List<TarifaModel> Tarifas { get; set; } = new();
+
+    private bool _esNuevo => Mesa == null || Mesa.Id == Guid.Empty;
+    private int _numero = 1;
+    private string _nombre = string.Empty;
+    private string _tipo = "Pool";
+    private Guid? _tarifaDefectoId;
+    private string _estado = "disponible";
+    private bool _activa = true;
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        if (Mesa != null)
+        {
+            _numero = Mesa.Numero;
+            _nombre = Mesa.Nombre;
+            _tipo = Mesa.Tipo;
+            _tarifaDefectoId = Mesa.TarifaDefectoId ?? Tarifas.FirstOrDefault()?.Id;
+            _estado = Mesa.Estado == "ocupada" || Mesa.Estado == "pausada" ? Mesa.Estado : (Mesa.Estado == "mantenimiento" ? "mantenimiento" : "disponible");
+            _activa = Mesa.Activa;
+        }
+        else
+        {
+            _tarifaDefectoId = Tarifas.FirstOrDefault()?.Id;
+        }
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nombre))
+        {
+            Snackbar.Add("El nombre de la mesa es obligatorio", Severity.Warning);
+            return;
+        }
+
+        _procesando = true;
+
+        var m = Mesa ?? new MesaModel();
+        m.Numero = _numero;
+        m.Nombre = _nombre.Trim();
+        m.Tipo = _tipo;
+        m.TarifaDefectoId = _tarifaDefectoId;
+        m.Estado = _estado;
+        m.Activa = _activa;
+
+        var exito = await Supabase.GuardarMesaAsync(m);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add(_esNuevo ? "Mesa creada exitosamente" : "Mesa actualizada exitosamente", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al guardar la mesa (verifica que el número no esté duplicado)", Severity.Error);
+        }
+    }
+}

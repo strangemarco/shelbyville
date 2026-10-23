@@ -1,0 +1,124 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.AddShoppingCart" Color="Color.Success" />
+            <MudText Typo="Typo.h6" Class="font-heading">Entrada de Mercadería / Reposición</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-3 py-2">
+            @if (ProductoFijo != null)
+            {
+                <div class="pa-3" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 8px;">
+                    <div style="font-weight: 700; font-size: 15px; color: var(--text-primary);">@ProductoFijo.Nombre</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                        Stock actual: <b style="color: var(--color-gold);">@ProductoFijo.Stock unidades</b>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <MudSelect T="Guid?" Label="Selecciona el Artículo a Reponer" @bind-Value="_productoIdSeleccionado" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var prod in Productos)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)prod.Id)">
+                            @prod.Nombre (Stock actual: @prod.Stock u.)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            <!-- Cantidad a ingresar -->
+            <MudNumericField T="int" @bind-Value="_cantidad" Label="Cantidad que ingresa (unidades)" Min="1" Variant="Variant.Outlined" Immediate="true" />
+
+            <!-- Botones rápidos de cantidad habitual -->
+            <div class="d-flex gap-2">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => _cantidad += 6)">+6 u.</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => _cantidad += 12)">+12 (Docena)</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => _cantidad += 24)">+24 (Cajón)</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => _cantidad += 48)">+48</MudButton>
+            </div>
+
+            <!-- Proyección del nuevo stock -->
+            @{
+                var prodActual = ProductoFijo ?? Productos.FirstOrDefault(p => p.Id == _productoIdSeleccionado);
+                var stockProyectado = (prodActual?.Stock ?? 0) + _cantidad;
+            }
+            <div class="pa-3 d-flex justify-space-between align-center" style="background: var(--bg-surface); border: 1px solid var(--color-gold); border-radius: 8px;">
+                <span style="font-size: 13px; color: var(--text-secondary);">Nuevo stock disponible:</span>
+                <span class="font-heading text-gold tabular-nums" style="font-size: 20px; font-weight: 800;">
+                    @stockProyectado unidades
+                </span>
+            </div>
+
+            <MudTextField @bind-Value="_motivo" Label="Motivo o Referencia" Variant="Variant.Outlined" Placeholder="Ej. Factura #458 Distribuidora / Reposición fin de semana" Lines="2" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="ConfirmarEntradaAsync" Disabled="_procesando || _cantidad <= 0 || (ProductoFijo == null && _productoIdSeleccionado == null)" Class="btn-touch">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Ingresando...</span>
+            }
+            else
+            {
+                <span>Confirmar Entrada</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public ProductoModel? ProductoFijo { get; set; }
+
+    [Parameter]
+    public List<ProductoModel> Productos { get; set; } = new();
+
+    private Guid? _productoIdSeleccionado;
+    private int _cantidad = 12;
+    private string _motivo = "Reposición de stock para barra";
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        if (ProductoFijo != null)
+        {
+            _productoIdSeleccionado = ProductoFijo.Id;
+        }
+        else
+        {
+            _productoIdSeleccionado = Productos.FirstOrDefault()?.Id;
+        }
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task ConfirmarEntradaAsync()
+    {
+        var prodId = ProductoFijo?.Id ?? _productoIdSeleccionado;
+        if (!prodId.HasValue || _cantidad <= 0) return;
+
+        _procesando = true;
+        var exito = await Supabase.RegistrarEntradaStockAsync(prodId.Value, _cantidad, _motivo);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add($"Se ingresaron exitosamente {_cantidad} unidades al inventario", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al ingresar existencias", Severity.Error);
+        }
+    }
+}

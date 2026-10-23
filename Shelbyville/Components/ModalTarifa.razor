@@ -1,0 +1,121 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.PriceChange" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">
+                @(_esNuevo ? "Nueva Tarifa de Billar" : $"Editar Tarifa: {Tarifa?.Nombre}")
+            </MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-4 py-2">
+            <MudTextField @bind-Value="_nombre" Label="Nombre de la Tarifa" Placeholder="Ej. Tarifa Estándar, Fin de Semana, VIP..." Required="true" Variant="Variant.Outlined" />
+
+            <MudTextField @bind-Value="_descripcion" Label="Descripción / Condiciones" Placeholder="Ej. Aplicable de lunes a jueves a partir de las 18:00" Lines="2" Variant="Variant.Outlined" />
+
+            <div class="d-flex gap-3">
+                <MudNumericField @bind-Value="_precioPorHora" Label="Precio por Hora (Bs)" Min="0.00m" Step="1.00m" Format="N2" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                <MudNumericField @bind-Value="_minutosMinimo" Label="Cobro Mínimo (minutos)" Min="1" Max="180" Step="5" Required="true" Variant="Variant.Outlined" Style="max-width: 170px;" />
+            </div>
+
+            <div class="d-flex gap-3 align-center">
+                <MudNumericField @bind-Value="_minutosTolerancia" Label="Tolerancia de Gracia (minutos)" Min="0" Max="30" Step="1" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" HelperText="Minutos libres antes de facturar siguiente fracción" />
+            </div>
+
+            <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                <MudSwitch @bind-Value="_activo" Color="Color.Success">
+                    <span style="font-size: 14px; font-weight: 600; color: @(_activo ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                        @(_activo ? "Tarifa Activa y Disponible para Asignación" : "Tarifa Inactiva (Deshabilitada)")
+                    </span>
+                </MudSwitch>
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="GuardarAsync" Disabled="_procesando" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Guardando...</span>
+            }
+            else
+            {
+                <span>@(_esNuevo ? "Crear Tarifa" : "Guardar Cambios")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public TarifaModel? Tarifa { get; set; }
+
+    private bool _esNuevo => Tarifa == null || Tarifa.Id == Guid.Empty;
+    private string _nombre = string.Empty;
+    private string? _descripcion;
+    private decimal _precioPorHora = 25.00m;
+    private int _minutosMinimo = 15;
+    private int _minutosTolerancia = 5;
+    private bool _activo = true;
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        if (Tarifa != null)
+        {
+            _nombre = Tarifa.Nombre;
+            _descripcion = Tarifa.Descripcion;
+            _precioPorHora = Tarifa.PrecioPorHora;
+            _minutosMinimo = Tarifa.MinutosMinimo;
+            _minutosTolerancia = Tarifa.MinutosTolerancia;
+            _activo = Tarifa.Activo;
+        }
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nombre))
+        {
+            Snackbar.Add("El nombre de la tarifa es obligatorio", Severity.Warning);
+            return;
+        }
+
+        if (_precioPorHora < 0)
+        {
+            Snackbar.Add("El precio por hora debe ser mayor o igual a 0", Severity.Warning);
+            return;
+        }
+
+        _procesando = true;
+
+        var t = Tarifa ?? new TarifaModel();
+        t.Nombre = _nombre.Trim();
+        t.Descripcion = _descripcion?.Trim();
+        t.PrecioPorHora = _precioPorHora;
+        t.MinutosMinimo = _minutosMinimo;
+        t.MinutosTolerancia = _minutosTolerancia;
+        t.Activo = _activo;
+
+        var exito = await Supabase.GuardarTarifaAsync(t);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add(_esNuevo ? "Tarifa creada exitosamente" : "Tarifa actualizada exitosamente", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al guardar la tarifa en Supabase", Severity.Error);
+        }
+    }
+}

@@ -1,0 +1,136 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.LocalBar" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">Cargar Consumo - Mesa @Mesa.Numero</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-3 py-2" style="max-height: 480px; overflow-y: auto;">
+            <!-- Buscador y filtro -->
+            <MudTextField @bind-Value="_busqueda" Placeholder="Buscar producto (ej. Corona, Papas...)" Immediate="true" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+
+            <!-- Selector de Producto -->
+            <MudText Typo="Typo.subtitle2" Style="color: var(--text-secondary);">Selecciona un artículo:</MudText>
+
+            <MudGrid Spacing="2">
+                @foreach (var prod in ProductosFiltrados)
+                {
+                    var isSelected = _productoSeleccionado?.Id == prod.Id;
+                    <MudItem xs="12" sm="6">
+                        <div class="pa-3 cursor-pointer d-flex flex-column justify-space-between" 
+                             style="border-radius: 10px; border: 2px solid @(isSelected ? "var(--color-gold)" : "var(--border-color)"); background: @(isSelected ? "var(--bg-elevated)" : "var(--bg-surface)"); height: 100%; transition: all 0.2s;"
+                             @onclick="@(() => SeleccionarProducto(prod))">
+                            <div class="d-flex justify-space-between align-start">
+                                <span style="font-weight: 600; font-size: 14px; color: var(--text-primary);">@prod.Nombre</span>
+                                <span class="text-gold font-heading" style="font-weight: 700; font-size: 15px;">Bs. @prod.PrecioVenta.ToString("N2")</span>
+                            </div>
+                            <div class="d-flex justify-space-between align-center mt-2">
+                                <span style="font-size: 12px; color: @(prod.StockBajo ? "var(--status-pausada)" : "var(--text-secondary)");">
+                                    Stock: @prod.Stock u.
+                                </span>
+                                @if (prod.Stock <= 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">Agotado</MudChip>
+                                }
+                            </div>
+                        </div>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (_productoSeleccionado != null)
+            {
+                <MudPaper Class="pa-3 mt-3 d-flex align-center justify-space-between" Style="background: var(--bg-elevated); border: 1px solid var(--color-gold); border-radius: 10px;">
+                    <div>
+                        <div style="font-weight: 600; color: var(--color-gold);">@_productoSeleccionado.Nombre</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">Subtotal: Bs. @((_cantidad * _productoSeleccionado.PrecioVenta).ToString("N2"))</div>
+                    </div>
+                    <div class="d-flex align-center gap-2">
+                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="DisminuirCantidad" Disabled="_cantidad <= 1" />
+                        <span style="font-weight: 700; font-size: 16px; min-width: 24px; text-align: center;">@_cantidad</span>
+                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="AumentarCantidad" Disabled="_cantidad >= _productoSeleccionado.Stock" />
+                    </div>
+                </MudPaper>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="ConfirmarConsumo" Disabled="_productoSeleccionado == null || _procesando" Class="btn-touch">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Cargando...</span>
+            }
+            else
+            {
+                <span>Cargar a la Mesa</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public MesaModel Mesa { get; set; } = default!;
+
+    [Parameter]
+    public List<ProductoModel> Productos { get; set; } = new();
+
+    private string _busqueda = string.Empty;
+    private ProductoModel? _productoSeleccionado;
+    private int _cantidad = 1;
+    private bool _procesando;
+
+    private IEnumerable<ProductoModel> ProductosFiltrados =>
+        string.IsNullOrWhiteSpace(_busqueda)
+            ? Productos.Where(p => p.Activo)
+            : Productos.Where(p => p.Activo && p.Nombre.Contains(_busqueda, StringComparison.OrdinalIgnoreCase));
+
+    private void SeleccionarProducto(ProductoModel prod)
+    {
+        if (prod.Stock <= 0) return;
+        _productoSeleccionado = prod;
+        _cantidad = 1;
+    }
+
+    private void AumentarCantidad()
+    {
+        if (_productoSeleccionado != null && _cantidad < _productoSeleccionado.Stock)
+            _cantidad++;
+    }
+
+    private void DisminuirCantidad()
+    {
+        if (_cantidad > 1)
+            _cantidad--;
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task ConfirmarConsumo()
+    {
+        if (Mesa.SesionActiva == null || _productoSeleccionado == null) return;
+
+        _procesando = true;
+        var exito = await Supabase.AgregarConsumoMesaAsync(Mesa.SesionActiva.Id, _productoSeleccionado.Id, _cantidad);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add($"Consumo agregado a Mesa {Mesa.Numero}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al cargar el consumo a la mesa", Severity.Error);
+        }
+    }
+}

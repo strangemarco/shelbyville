@@ -1,0 +1,257 @@
+@page "/caja"
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<div class="d-flex flex-column gap-5">
+    <!-- Header -->
+    <div class="d-flex justify-space-between align-center">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold);">
+                GESTIÓN DE CAJA Y TURNOS
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Apertura con fondo inicial, control de ingresos en efectivo/QR y arqueo de cierre.
+            </p>
+        </div>
+        <div>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarEstadoCajaAsync" Title="Actualizar datos" />
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else if (_cajaAbierta == null)
+    {
+        <!-- Apertura de Caja Form -->
+        <div class="d-flex justify-center">
+            <div class="shelby-card pa-6" style="max-width: 500px; width: 100%; background: var(--bg-surface); border: 2px solid var(--border-color);">
+                <div class="d-flex align-center gap-3 mb-4">
+                    <div class="pa-3" style="background: rgba(239, 68, 68, 0.15); border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" Size="Size.Medium" />
+                    </div>
+                    <div>
+                        <h2 class="font-heading ma-0" style="font-size: 20px; font-weight: 700; color: var(--text-primary);">
+                            Apertura de Turno de Caja
+                        </h2>
+                        <span style="font-size: 12px; color: var(--text-secondary);">No hay ninguna caja abierta actualmente.</span>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-column gap-4">
+                    <MudTextField @bind-Value="_nombreCajaApertura" Label="Nombre o Identificador de Caja" Variant="Variant.Outlined" />
+                    <MudNumericField T="decimal" @bind-Value="_montoInicialApertura" Label="Fondo Inicial en Efectivo (Bs.)" Format="N2" Min="0" Variant="Variant.Outlined" />
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="btn-touch mt-2" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="AbrirCajaAsync" Disabled="_procesando">
+                        @if (_procesando)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Abriendo caja...</span>
+                        }
+                        else
+                        {
+                            <span>Confirmar Apertura de Caja</span>
+                        }
+                    </MudButton>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Caja Abierta: Dashboard de Turno y Arqueo -->
+        <MudGrid Spacing="3">
+            <!-- Resumen del Turno Activo -->
+            <MudItem xs="12" md="7">
+                <div class="shelby-card pa-5 d-flex flex-column gap-4 h-100" style="background: var(--bg-surface); border: 2px solid rgba(34, 197, 94, 0.4);">
+                    <div class="d-flex justify-space-between align-center pb-3" style="border-bottom: 1px solid var(--border-color);">
+                        <div class="d-flex align-center gap-2">
+                            <span class="badge-disponible px-3 py-1" style="border-radius: 20px; font-size: 12px; font-weight: 700;">
+                                CAJA ABIERTA
+                            </span>
+                            <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                                @_cajaAbierta.Nombre
+                            </span>
+                        </div>
+                        <span style="font-size: 12px; color: var(--text-secondary);">
+                            Abierta desde: @_cajaAbierta.HoraApertura.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                        </span>
+                    </div>
+
+                    <!-- Métricas de la caja -->
+                    <MudGrid Spacing="2">
+                        <MudItem xs="6">
+                            <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Fondo Inicial</div>
+                                <div class="font-heading mt-1 tabular-nums" style="font-size: 20px; font-weight: 700;">
+                                    Bs. @_cajaAbierta.MontoInicial.ToString("N2")
+                                </div>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Ventas en Efectivo</div>
+                                <div class="font-heading mt-1 text-gold tabular-nums" style="font-size: 20px; font-weight: 700;">
+                                    Bs. @_cajaAbierta.MontoVentasEfectivo.ToString("N2")
+                                </div>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Cobros por QR</div>
+                                <div class="font-heading mt-1 tabular-nums" style="font-size: 20px; font-weight: 700; color: var(--status-reservada);">
+                                    Bs. @_cajaAbierta.MontoVentasQr.ToString("N2")
+                                </div>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Cobros con Tarjeta</div>
+                                <div class="font-heading mt-1 tabular-nums" style="font-size: 20px; font-weight: 700; color: var(--status-pausada);">
+                                    Bs. @_cajaAbierta.MontoVentasTarjeta.ToString("N2")
+                                </div>
+                            </div>
+                        </MudItem>
+                    </MudGrid>
+
+                    <!-- Efectivo esperado en gaveta -->
+                    <div class="pa-4 mt-2 d-flex justify-space-between align-center" style="background: radial-gradient(circle at center, #1C2923 0%, #101B16 100%); border: 1px solid var(--color-gold); border-radius: 10px;">
+                        <div>
+                            <div class="font-heading text-gold" style="font-weight: 700; font-size: 16px;">EFECTIVO ESPERADO EN GAVETA:</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">Monto inicial + Cobros en efectivo</div>
+                        </div>
+                        <div class="font-heading text-gold tabular-nums" style="font-weight: 800; font-size: 26px;">
+                            Bs. @EfectivoEsperado.ToString("N2")
+                        </div>
+                    </div>
+                </div>
+            </MudItem>
+
+            <!-- Arqueo y Cierre de Turno -->
+            <MudItem xs="12" md="5">
+                <div class="shelby-card pa-5 d-flex flex-column gap-3 h-100" style="background: var(--bg-surface); border: 2px solid var(--border-color);">
+                    <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
+                        <MudIcon Icon="@Icons.Material.Filled.Calculate" Color="Color.Tertiary" />
+                        <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                            ARQUEO Y CIERRE
+                        </span>
+                    </div>
+
+                    <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                        Ingresa el monto de dinero físico contado en caja para calcular posibles diferencias o sobrantes.
+                    </p>
+
+                    <MudNumericField T="decimal" @bind-Value="_montoRealContado" Label="Efectivo Real Contado (Bs.)" Format="N2" Min="0" Variant="Variant.Outlined" Immediate="true" />
+
+                    <!-- Comparativa de Arqueo -->
+                    <div class="pa-3 mt-1" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                        <div class="d-flex justify-space-between" style="font-size: 12px; color: var(--text-secondary);">
+                            <span>Sistema espera:</span>
+                            <span class="tabular-nums" style="font-weight: 600;">Bs. @EfectivoEsperado.ToString("N2")</span>
+                        </div>
+                        <div class="d-flex justify-space-between mt-1" style="font-size: 12px; color: var(--text-secondary);">
+                            <span>Efectivo contado:</span>
+                            <span class="tabular-nums" style="font-weight: 600;">Bs. @_montoRealContado.ToString("N2")</span>
+                        </div>
+                        <MudDivider Class="my-2" />
+                        <div class="d-flex justify-space-between align-center">
+                            <span style="font-size: 13px; font-weight: 700;">Diferencia:</span>
+                            <span class="font-heading tabular-nums" style="font-size: 18px; font-weight: 800; color: @(DiferenciaArqueo == 0 ? "var(--status-disponible)" : (DiferenciaArqueo > 0 ? "var(--status-reservada)" : "var(--status-ocupada)"));">
+                                @(DiferenciaArqueo >= 0 ? "+" : "")Bs. @DiferenciaArqueo.ToString("N2")
+                                <span style="font-size: 11px; font-weight: 600;">
+                                    @(DiferenciaArqueo == 0 ? " (Exacto)" : (DiferenciaArqueo > 0 ? " (Sobrante)" : " (Faltante)"))
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <MudTextField @bind-Value="_observacionesCierre" Label="Observaciones o Notas de Cierre" Variant="Variant.Outlined" Lines="2" Placeholder="Notas sobre el turno..." />
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" FullWidth="true" Class="btn-touch mt-auto" StartIcon="@Icons.Material.Filled.Lock" OnClick="CerrarCajaAsync" Disabled="_procesando">
+                        @if (_procesando)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Cerrando caja...</span>
+                        }
+                        else
+                        {
+                            <span>Cerrar Turno de Caja</span>
+                        }
+                    </MudButton>
+                </div>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    private CajaModel? _cajaAbierta;
+    private bool _cargando = true;
+    private bool _procesando;
+
+    // Campos de apertura
+    private string _nombreCajaApertura = "Caja Principal - Turno Tarde";
+    private decimal _montoInicialApertura = 100.00m;
+
+    // Campos de cierre
+    private decimal _montoRealContado = 100.00m;
+    private string? _observacionesCierre;
+
+    private decimal EfectivoEsperado => (_cajaAbierta?.MontoInicial ?? 0) + (_cajaAbierta?.MontoVentasEfectivo ?? 0) + (_cajaAbierta?.MontoIngresosExtra ?? 0) - (_cajaAbierta?.MontoEgresos ?? 0);
+    private decimal DiferenciaArqueo => _montoRealContado - EfectivoEsperado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarEstadoCajaAsync();
+    }
+
+    private async Task CargarEstadoCajaAsync()
+    {
+        _cargando = true;
+        _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
+        if (_cajaAbierta != null)
+        {
+            _montoRealContado = EfectivoEsperado;
+        }
+        _cargando = false;
+    }
+
+    private async Task AbrirCajaAsync()
+    {
+        _procesando = true;
+        var exito = await Supabase.AbrirCajaAsync(_nombreCajaApertura, _montoInicialApertura);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add("Caja abierta exitosamente", Severity.Success);
+            await CargarEstadoCajaAsync();
+        }
+        else
+        {
+            Snackbar.Add("Error al abrir caja", Severity.Error);
+        }
+    }
+
+    private async Task CerrarCajaAsync()
+    {
+        if (_cajaAbierta == null) return;
+
+        _procesando = true;
+        var exito = await Supabase.CerrarCajaAsync(_cajaAbierta.Id, _montoRealContado, _observacionesCierre);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add("Caja cerrada y arqueada exitosamente", Severity.Success);
+            await CargarEstadoCajaAsync();
+        }
+        else
+        {
+            Snackbar.Add("Error al cerrar caja", Severity.Error);
+        }
+    }
+}

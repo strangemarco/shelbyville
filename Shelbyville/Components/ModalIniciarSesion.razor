@@ -1,0 +1,86 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.PlayCircleFilled" Color="Color.Success" />
+            <MudText Typo="Typo.h6" Class="font-heading">Iniciar Sesión - Mesa @Mesa.Numero</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-4 py-2">
+            <MudTextField @bind-Value="_clienteNombre" Label="Nombre del Cliente o Referencia" Variant="Variant.Outlined" Placeholder="Ej. Carlos / Grupo Los Amigos" AutoFocus="true" />
+
+            <MudSelect T="Guid?" Label="Tarifa a aplicar" @bind-Value="_tarifaSeleccionadaId" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var t in Tarifas)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)t.Id)">
+                        @t.Nombre - Bs. @t.PrecioPorHora.ToString("N2")/hr (Mín. @t.MinutosMinimo min)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                El cronómetro comenzará a correr inmediatamente al confirmar y la mesa pasará al estado ocupado.
+            </MudAlert>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="ConfirmarInicio" Disabled="_procesando" Class="btn-touch">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Iniciando...</span>
+            }
+            else
+            {
+                <span>Iniciar Juego</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public MesaModel Mesa { get; set; } = default!;
+
+    [Parameter]
+    public List<TarifaModel> Tarifas { get; set; } = new();
+
+    [Parameter]
+    public string? ClienteNombreInicial { get; set; }
+
+    private string _clienteNombre = string.Empty;
+    private Guid? _tarifaSeleccionadaId;
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        _clienteNombre = ClienteNombreInicial ?? string.Empty;
+        _tarifaSeleccionadaId = Mesa.TarifaDefectoId ?? Tarifas.FirstOrDefault()?.Id;
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task ConfirmarInicio()
+    {
+        _procesando = true;
+        var exito = await Supabase.IniciarSesionMesaAsync(Mesa.Id, _tarifaSeleccionadaId, _clienteNombre);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add($"Mesa {Mesa.Numero} iniciada con éxito", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al iniciar la sesión", Severity.Error);
+        }
+    }
+}

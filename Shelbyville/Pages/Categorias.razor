@@ -1,0 +1,278 @@
+@page "/categorias"
+@inject SupabaseService Supabase
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<div class="d-flex flex-column gap-5">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold);">
+                CATEGORÍAS DE PRODUCTOS
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Organiza las familias de bebidas, licores, snacks y artículos para el punto de venta y catálogo.
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-center">
+            <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.LocalBar" OnClick="@(() => Navigation.NavigateTo("/productos"))">
+                Ver Productos
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Add" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" OnClick="AbrirModalNuevaCategoria">
+                + Nueva Categoría
+            </MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarDatosAsync" />
+        </div>
+    </div>
+
+    <!-- Tarjetas de Resumen -->
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="4">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Total Categorías</div>
+                    <div class="font-heading text-gold mt-1 tabular-nums" style="font-size: 26px; font-weight: 800;">
+                        @_categorias.Count
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(212, 175, 55, 0.15); border-radius: 12px; border: 1px solid rgba(212, 175, 55, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.Category" Color="Color.Tertiary" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Categorías Activas</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 26px; font-weight: 800; color: var(--status-disponible);">
+                        @_categorias.Count(c => c.Activo)
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(34, 197, 94, 0.15); border-radius: 12px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Productos Asignados</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 26px; font-weight: 800; color: var(--status-reservada);">
+                        @_productos.Count(p => p.CategoriaId.HasValue)
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(56, 189, 248, 0.15); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Info" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Filtros y Búsqueda -->
+    <div class="shelby-card pa-4" style="background: var(--bg-surface);">
+        <div class="d-flex flex-column flex-sm-row gap-3">
+            <MudTextField @bind-Value="_busqueda" Placeholder="Buscar categoría por nombre o descripción..." Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="flex-grow-1" />
+            
+            <MudSelect T="string" @bind-Value="_filtroEstado" Label="Estado" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 180px;">
+                <MudSelectItem T="string" Value="@("todos")">Todos los estados</MudSelectItem>
+                <MudSelectItem T="string" Value="@("activas")">Solo Activas</MudSelectItem>
+                <MudSelectItem T="string" Value="@("inactivas")">Inactivas</MudSelectItem>
+            </MudSelect>
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- Tabla de Categorías -->
+        <MudTable Items="CategoriasFiltradas" Dense="true" Hover="true" Elevation="1" Class="shelby-card" Style="background: var(--bg-surface);">
+            <HeaderContent>
+                <MudTh Style="width: 80px; text-align: center;">Orden</MudTh>
+                <MudTh>Categoría</MudTh>
+                <MudTh>Descripción</MudTh>
+                <MudTh Style="text-align: center;">Productos</MudTh>
+                <MudTh Style="text-align: center;">Estado</MudTh>
+                <MudTh Style="text-align: center; width: 140px;">Acciones</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Orden" Style="text-align: center;" Class="tabular-nums font-heading">
+                    <span style="font-weight: 700; color: var(--color-gold);">#@context.Orden</span>
+                </MudTd>
+                <MudTd DataLabel="Categoría">
+                    <div class="d-flex align-center gap-3">
+                        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(212, 175, 55, 0.15); border: 1px solid rgba(212, 175, 55, 0.3); display: flex; align-items: center; justify-content: center;">
+                            <MudIcon Icon="@ObtenerIconoMaterial(context.Icono)" Size="Size.Small" Style="color: var(--color-gold);" />
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 15px; color: var(--text-primary);">
+                                @context.Nombre
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-secondary);">
+                                ID: @context.Id.ToString().Substring(0, 8)...
+                            </div>
+                        </div>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Descripción" Style="color: var(--text-secondary); max-width: 300px;">
+                    @(string.IsNullOrWhiteSpace(context.Descripcion) ? "-" : context.Descripcion)
+                </MudTd>
+                <MudTd DataLabel="Productos" Style="text-align: center;">
+                    @{
+                        var count = _productos.Count(p => p.CategoriaId == context.Id);
+                    }
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(count > 0 ? Color.Tertiary : Color.Default)">
+                        @count artículos
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Estado" Style="text-align: center;">
+                    @if (context.Activo)
+                    {
+                        <span class="badge-disponible px-3 py-1" style="border-radius: 20px; font-size: 11px; font-weight: 700;">
+                            ACTIVA
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="px-3 py-1" style="background: rgba(107, 114, 128, 0.2); color: #9CA3AF; border-radius: 20px; font-size: 11px; font-weight: 700;">
+                            INACTIVA
+                        </span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Acciones" Style="text-align: center;">
+                    <div class="d-flex justify-center gap-1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Tertiary" OnClick="@(() => AbrirModalEditarCategoria(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmarEliminar(context))" />
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="pa-8 text-center" style="color: var(--text-secondary);">
+                    <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Class="mb-2" />
+                    <div>No se encontraron categorías con los filtros actuales.</div>
+                </div>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 8, 15, 25, 50, 100 }"
+                               RowsPerPageString="Filas por página:"
+                               InfoFormat="{first_item}-{last_item} de {all_items}"
+                               AllItemsText="Todos" />
+            </PagerContent>
+        </MudTable>
+    }
+</div>
+
+@code {
+    private List<CategoriaModel> _categorias = new();
+    private List<ProductoModel> _productos = new();
+    private bool _cargando = true;
+    private string _busqueda = string.Empty;
+    private string _filtroEstado = "todos";
+
+    private IEnumerable<CategoriaModel> CategoriasFiltradas =>
+        _categorias.Where(c =>
+        {
+            var matchBusqueda = string.IsNullOrWhiteSpace(_busqueda) ||
+                c.Nombre.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) ||
+                (c.Descripcion?.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) ?? false);
+
+            var matchEstado = _filtroEstado switch
+            {
+                "activas" => c.Activo,
+                "inactivas" => !c.Activo,
+                _ => true
+            };
+
+            return matchBusqueda && matchEstado;
+        });
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        _cargando = true;
+        _categorias = await Supabase.GetCategoriasAsync();
+        _productos = await Supabase.GetProductosAsync();
+        _cargando = false;
+    }
+
+    private string ObtenerIconoMaterial(string? iconoKey)
+    {
+        return (iconoKey ?? string.Empty).ToLowerInvariant() switch
+        {
+            "beer" => Icons.Material.Filled.SportsBar,
+            "wine" => Icons.Material.Filled.WineBar,
+            "cupsoda" => Icons.Material.Filled.LocalDrink,
+            "utensils" => Icons.Material.Filled.Restaurant,
+            "fastfood" => Icons.Material.Filled.Fastfood,
+            "coffee" => Icons.Material.Filled.LocalCafe,
+            "package" => Icons.Material.Filled.Inventory2,
+            "sportsscore" => Icons.Material.Filled.SportsScore,
+            _ => Icons.Material.Filled.Layers
+        };
+    }
+
+    private async Task AbrirModalNuevaCategoria()
+    {
+        var parameters = new DialogParameters<ModalCategoria>();
+        var dialog = await DialogService.ShowAsync<ModalCategoria>("Nueva Categoría", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task AbrirModalEditarCategoria(CategoriaModel categoria)
+    {
+        var parameters = new DialogParameters<ModalCategoria>
+        {
+            { x => x.Categoria, categoria }
+        };
+        var dialog = await DialogService.ShowAsync<ModalCategoria>("Editar Categoría", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task ConfirmarEliminar(CategoriaModel categoria)
+    {
+        var productosAsociados = _productos.Count(p => p.CategoriaId == categoria.Id);
+        var mensaje = productosAsociados > 0
+            ? $"Esta categoría tiene {productosAsociados} producto(s) asociado(s). Si la eliminas, quedarán sin categoría asignada. ¿Deseas continuar?"
+            : $"¿Estás seguro de eliminar la categoría '{categoria.Nombre}'?";
+
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Eliminar Categoría",
+            mensaje,
+            yesText: "Sí, Eliminar",
+            cancelText: "Cancelar"
+        );
+
+        if (confirmado == true)
+        {
+            var exito = await Supabase.EliminarCategoriaAsync(categoria.Id);
+            if (exito)
+            {
+                Snackbar.Add("Categoría eliminada", Severity.Success);
+                await CargarDatosAsync();
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar la categoría", Severity.Error);
+            }
+        }
+    }
+}

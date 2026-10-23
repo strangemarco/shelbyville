@@ -1,0 +1,142 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@(EsEdicion ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddBox)" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">
+                @(EsEdicion ? $"Editar Artículo: {Producto.Nombre}" : "Registrar Nuevo Producto")
+            </MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-3 py-2" style="max-height: 500px; overflow-y: auto;">
+            <div class="d-flex gap-3">
+                <MudTextField @bind-Value="_codigo" Label="Código / SKU" Variant="Variant.Outlined" Placeholder="Ej. CER-04" Margin="Margin.Dense" Style="max-width: 140px;" />
+                <MudTextField @bind-Value="_nombre" Label="Nombre del Artículo *" Variant="Variant.Outlined" Placeholder="Ej. Cerveza Stella Artois 330ml" Margin="Margin.Dense" Class="flex-grow-1" AutoFocus="true" Required="true" />
+            </div>
+
+            <MudSelect T="Guid?" Label="Categoría" @bind-Value="_categoriaId" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var cat in Categorias)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)cat.Id)">@cat.Nombre</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_descripcion" Label="Descripción / Presentación" Variant="Variant.Outlined" Placeholder="Botella individual fría" Margin="Margin.Dense" Lines="2" />
+
+            <div class="d-flex gap-3">
+                <MudNumericField T="decimal" @bind-Value="_precioCompra" Label="Costo de Compra (Bs)" Format="N2" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                <MudNumericField T="decimal" @bind-Value="_precioVenta" Label="Precio de Venta (Bs) *" Format="N2" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+            </div>
+
+            <div class="d-flex gap-3">
+                @if (!EsEdicion)
+                {
+                    <MudNumericField T="int" @bind-Value="_stockInicial" Label="Stock Inicial (u.)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                }
+                <MudNumericField T="int" @bind-Value="_stockMinimo" Label="Alerta Stock Mínimo (u.)" Min="1" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </div>
+
+            <div class="d-flex justify-space-between align-center pa-2 mt-1" style="background: var(--bg-elevated); border-radius: 8px;">
+                <span style="font-size: 13px; color: var(--text-secondary);">Disponible para venta en barra y mesas:</span>
+                <MudSwitch @bind-Value="_activo" Color="Color.Success" />
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="GuardarAsync" Disabled="_procesando || string.IsNullOrWhiteSpace(_nombre)" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Guardando...</span>
+            }
+            else
+            {
+                <span>@(EsEdicion ? "Guardar Cambios" : "Crear Producto")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public ProductoModel? Producto { get; set; }
+
+    [Parameter]
+    public List<CategoriaModel> Categorias { get; set; } = new();
+
+    private bool EsEdicion => Producto != null && Producto.Id != Guid.Empty;
+
+    private string? _codigo;
+    private string _nombre = string.Empty;
+    private Guid? _categoriaId;
+    private string? _descripcion;
+    private decimal _precioCompra;
+    private decimal _precioVenta = 10.00m;
+    private int _stockInicial = 10;
+    private int _stockMinimo = 5;
+    private bool _activo = true;
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        if (EsEdicion && Producto != null)
+        {
+            _codigo = Producto.Codigo;
+            _nombre = Producto.Nombre;
+            _categoriaId = Producto.CategoriaId;
+            _descripcion = Producto.Descripcion;
+            _precioCompra = Producto.PrecioCompra;
+            _precioVenta = Producto.PrecioVenta;
+            _stockMinimo = Producto.StockMinimo;
+            _activo = Producto.Activo;
+        }
+        else
+        {
+            _categoriaId = Categorias.FirstOrDefault()?.Id;
+        }
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nombre)) return;
+
+        _procesando = true;
+
+        var modelo = Producto ?? new ProductoModel();
+        modelo.Codigo = _codigo;
+        modelo.Nombre = _nombre.Trim();
+        modelo.CategoriaId = _categoriaId;
+        modelo.Descripcion = _descripcion;
+        modelo.PrecioCompra = _precioCompra;
+        modelo.PrecioVenta = _precioVenta;
+        modelo.StockMinimo = _stockMinimo;
+        modelo.Activo = _activo;
+
+        if (!EsEdicion)
+        {
+            modelo.Stock = _stockInicial;
+        }
+
+        var exito = await Supabase.GuardarProductoAsync(modelo);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add(EsEdicion ? "Producto actualizado correctamente" : "Producto creado y agregado al inventario", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al guardar el producto", Severity.Error);
+        }
+    }
+}

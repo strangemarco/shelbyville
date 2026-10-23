@@ -1,0 +1,26 @@
+## Visual Studio / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build and Output Directories
+[Bb]in/
+[Oo]bj/
+bin/
+obj/
+
+## Secret Configurations and Credentials
+**/appsettings.json
+**/appsettings.Development.json
+**/appsettings.*.json
+!**/appsettings.example.json
+*.env
+*.env.*
+
+## OS Generated Files
+.DS_Store
+Thumbs.db
+*.log

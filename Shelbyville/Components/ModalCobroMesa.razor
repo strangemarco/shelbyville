@@ -1,0 +1,343 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">Liquidación y Cobro - Mesa @Mesa.Numero</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-3 py-1" style="max-height: 520px; overflow-y: auto;">
+            <!-- Resumen de cuenta -->
+            <MudPaper Class="pa-4" Style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px;">
+                <div class="d-flex justify-space-between mb-2">
+                    <span style="color: var(--text-secondary);">Cliente:</span>
+                    <span style="font-weight: 600;">@(Mesa.SesionActiva?.ClienteNombre ?? "Cliente Mostrador")</span>
+                </div>
+                <div class="d-flex justify-space-between mb-2">
+                    <span style="color: var(--text-secondary);">Tiempo de Billar (@Mesa.TiempoTranscurridoStr):</span>
+                    <span style="font-weight: 600;">Bs. @Mesa.MontoTiempoCalculado.ToString("N2")</span>
+                </div>
+
+                @if (_consumos.Any())
+                {
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Style="color: var(--color-gold); font-weight: 700; text-transform: uppercase;">Consumos de Barra:</MudText>
+                    @foreach (var c in _consumos)
+                    {
+                        <div class="d-flex justify-space-between align-center my-1" style="font-size: 13px;">
+                            <span>@c.Cantidad x @(c.Producto?.Nombre ?? "Producto")</span>
+                            <div class="d-flex align-center gap-2">
+                                <span>Bs. @c.Subtotal.ToString("N2")</span>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" OnClick="@(() => AnularConsumo(c))" />
+                            </div>
+                        </div>
+                    }
+                    <div class="d-flex justify-space-between mt-2" style="font-weight: 600; font-size: 13px; color: var(--text-secondary);">
+                        <span>Subtotal Consumos:</span>
+                        <span>Bs. @_consumos.Sum(c => c.Subtotal).ToString("N2")</span>
+                    </div>
+                }
+
+                <MudDivider Class="my-3" />
+
+                <!-- Descuento -->
+                <div class="d-flex align-center justify-space-between mb-3">
+                    <span style="color: var(--text-secondary); font-size: 13px;">Descuento especial:</span>
+                    <MudNumericField T="decimal" Value="_descuento" ValueChanged="OnDescuentoChanged" Min="0" Max="@SubtotalGeneral" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 145px; min-width: 140px;" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                </div>
+
+                <!-- Total destacado -->
+                <div class="d-flex justify-space-between align-center pa-3" style="background: var(--bg-elevated); border: 1px solid var(--color-gold); border-radius: 8px;">
+                    <span class="font-heading" style="font-weight: 700; font-size: 16px; color: var(--text-primary);">TOTAL A COBRAR:</span>
+                    <span class="font-heading text-gold tabular-nums" style="font-weight: 800; font-size: 24px;">Bs. @TotalFinal.ToString("N2")</span>
+                </div>
+            </MudPaper>
+
+            <!-- Selección de método de pago -->
+            <MudText Typo="Typo.subtitle2" Style="color: var(--text-secondary);">Método de Pago:</MudText>
+            <div class="d-flex gap-2">
+                <MudButton Variant="@(_metodoPago == "efectivo" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" OnClick="@(() => SeleccionarMetodoPago("efectivo"))" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.Payments">
+                    Efectivo
+                </MudButton>
+                <MudButton Variant="@(_metodoPago == "qr" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" OnClick="@(() => SeleccionarMetodoPago("qr"))" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.QrCode2">
+                    QR
+                </MudButton>
+                <MudButton Variant="@(_metodoPago == "mixto" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" OnClick="@(() => SeleccionarMetodoPago("mixto"))" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.CallSplit">
+                    Mixto (Efe+QR)
+                </MudButton>
+            </div>
+
+            <!-- Si es efectivo: Monto recibido y cambio -->
+            @if (_metodoPago == "efectivo")
+            {
+                <div class="d-flex gap-3 align-center mt-2">
+                    <MudNumericField T="decimal?" @bind-Value="_montoRecibido" Label="Monto Recibido" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                    <div class="pa-2 px-3 text-center flex-grow-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 8px;">
+                        <div style="font-size: 11px; color: var(--text-secondary);">Cambio / Vuelto:</div>
+                        <div class="font-heading tabular-nums" style="font-weight: 700; font-size: 18px; color: @(CambioCalculado >= 0 ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                            Bs. @Math.Max(0, CambioCalculado).ToString("N2")
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (_metodoPago == "mixto")
+            {
+                <div class="pa-3 mt-2" style="background: var(--bg-surface); border: 1px solid var(--color-gold); border-radius: 8px;">
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--color-gold); text-transform: uppercase;">
+                            <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            Desglose Pago Mixto
+                        </span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">
+                            Total a Cobrar: <b>Bs. @TotalFinal.ToString("N2")</b>
+                        </span>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-2">
+                        <MudNumericField T="decimal" Value="_montoEfectivoMixto" ValueChanged="OnMontoEfectivoMixtoChanged" Label="Parte Efectivo" Format="N2" Min="0" Max="@TotalFinal" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                        <MudNumericField T="decimal" Value="_montoQrMixto" ValueChanged="OnMontoQrMixtoChanged" Label="Parte QR" Format="N2" Min="0" Max="@TotalFinal" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                    </div>
+
+                    <div class="d-flex gap-2 align-center">
+                        <MudNumericField T="decimal?" @bind-Value="_efectivoRecibidoMixto" Label="Efectivo Entregado" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentText="Bs. " />
+                        <div class="pa-2 px-3 text-center flex-grow-1" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 6px;">
+                            <div style="font-size: 10px; color: var(--text-secondary);">Cambio (Efectivo):</div>
+                            <div class="font-heading tabular-nums" style="font-weight: 700; font-size: 16px; color: @(CambioMixtoCalculado >= 0 ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                                Bs. @Math.Max(0, CambioMixtoCalculado).ToString("N2")
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (Math.Round(_montoEfectivoMixto + _montoQrMixto, 2) != TotalFinal)
+                    {
+                        <div class="mt-2 pa-1 px-2" style="background: rgba(239, 68, 68, 0.1); border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                            <span style="font-size: 11px; color: var(--status-ocupada);">
+                                La suma (Bs. @((_montoEfectivoMixto + _montoQrMixto).ToString("N2"))) debe ser igual a Bs. @TotalFinal.ToString("N2")
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_cajaAbierta == null)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    No hay una caja abierta en este momento. Abre caja desde el módulo de Caja para registrar ingresos.
+                </MudAlert>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="ConfirmarLiquidacion" Disabled="@BotonCobroDeshabilitado" Class="btn-touch">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Cobrando...</span>
+            }
+            else
+            {
+                <span>Confirmar Pago y Liberar Mesa</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public MesaModel Mesa { get; set; } = default!;
+
+    private List<ConsumoMesaModel> _consumos = new();
+    private CajaModel? _cajaAbierta;
+    private string _metodoPago = "efectivo";
+    private decimal _descuento = 0.00m;
+    private decimal? _montoRecibido;
+    private bool _procesando;
+
+    private decimal _montoEfectivoMixto = 0.00m;
+    private decimal _montoQrMixto = 0.00m;
+    private decimal? _efectivoRecibidoMixto;
+
+    private decimal SubtotalGeneral => Mesa.MontoTiempoCalculado + _consumos.Sum(c => c.Subtotal);
+    private decimal TotalFinal => Math.Max(0.00m, SubtotalGeneral - _descuento);
+    private decimal CambioCalculado => (_montoRecibido ?? TotalFinal) - TotalFinal;
+    private decimal CambioMixtoCalculado => (_efectivoRecibidoMixto ?? _montoEfectivoMixto) - _montoEfectivoMixto;
+
+    private bool BotonCobroDeshabilitado =>
+        _cajaAbierta == null ||
+        _procesando ||
+        (_metodoPago == "efectivo" && _montoRecibido.HasValue && _montoRecibido.Value < TotalFinal) ||
+        (_metodoPago == "mixto" && (
+            Math.Round(_montoEfectivoMixto + _montoQrMixto, 2) != TotalFinal ||
+            (_efectivoRecibidoMixto.HasValue && _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+        ));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
+
+        if (Mesa.SesionActiva != null)
+        {
+            _consumos = await Supabase.GetConsumosMesaAsync(Mesa.SesionActiva.Id);
+            _montoRecibido = TotalFinal;
+        }
+    }
+
+    private void SeleccionarMetodoPago(string metodo)
+    {
+        _metodoPago = metodo;
+        if (_metodoPago == "mixto")
+        {
+            if (_montoEfectivoMixto == 0 && _montoQrMixto == 0)
+            {
+                _montoEfectivoMixto = Math.Round(TotalFinal / 2m, 2);
+                _montoQrMixto = TotalFinal - _montoEfectivoMixto;
+            }
+            else if (_montoEfectivoMixto + _montoQrMixto != TotalFinal)
+            {
+                if (_montoEfectivoMixto <= TotalFinal)
+                {
+                    _montoQrMixto = TotalFinal - _montoEfectivoMixto;
+                }
+                else
+                {
+                    _montoEfectivoMixto = TotalFinal;
+                    _montoQrMixto = 0;
+                }
+            }
+            _efectivoRecibidoMixto = _montoEfectivoMixto;
+        }
+        else if (_metodoPago == "efectivo")
+        {
+            _montoRecibido = TotalFinal;
+        }
+    }
+
+    private void OnDescuentoChanged(decimal nuevoDescuento)
+    {
+        _descuento = nuevoDescuento;
+        AjustarTotalesMixto();
+    }
+
+    private void OnMontoEfectivoMixtoChanged(decimal nuevoEfectivo)
+    {
+        _montoEfectivoMixto = Math.Max(0, nuevoEfectivo);
+        if (_montoEfectivoMixto > TotalFinal)
+        {
+            _montoEfectivoMixto = TotalFinal;
+        }
+        _montoQrMixto = Math.Max(0, TotalFinal - _montoEfectivoMixto);
+        if (!_efectivoRecibidoMixto.HasValue || _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+        {
+            _efectivoRecibidoMixto = _montoEfectivoMixto;
+        }
+    }
+
+    private void OnMontoQrMixtoChanged(decimal nuevoQr)
+    {
+        _montoQrMixto = Math.Max(0, nuevoQr);
+        if (_montoQrMixto > TotalFinal)
+        {
+            _montoQrMixto = TotalFinal;
+        }
+        _montoEfectivoMixto = Math.Max(0, TotalFinal - _montoQrMixto);
+        if (!_efectivoRecibidoMixto.HasValue || _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+        {
+            _efectivoRecibidoMixto = _montoEfectivoMixto;
+        }
+    }
+
+    private void AjustarTotalesMixto()
+    {
+        if (_metodoPago == "mixto")
+        {
+            if (_montoEfectivoMixto > TotalFinal)
+            {
+                _montoEfectivoMixto = TotalFinal;
+            }
+            _montoQrMixto = Math.Max(0, TotalFinal - _montoEfectivoMixto);
+            if (!_efectivoRecibidoMixto.HasValue || _efectivoRecibidoMixto.Value < _montoEfectivoMixto)
+            {
+                _efectivoRecibidoMixto = _montoEfectivoMixto;
+            }
+        }
+        else if (_metodoPago == "efectivo")
+        {
+            if (!_montoRecibido.HasValue || _montoRecibido.Value < TotalFinal)
+            {
+                _montoRecibido = TotalFinal;
+            }
+        }
+    }
+
+    private async Task AnularConsumo(ConsumoMesaModel consumo)
+    {
+        var exito = await Supabase.AnularConsumoMesaAsync(consumo.Id, "Anulado antes del cobro final");
+        if (exito)
+        {
+            _consumos.Remove(consumo);
+            Snackbar.Add("Consumo anulado y stock restituido", Severity.Info);
+            AjustarTotalesMixto();
+            StateHasChanged();
+        }
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task ConfirmarLiquidacion()
+    {
+        if (Mesa.SesionActiva == null || _cajaAbierta == null) return;
+
+        _procesando = true;
+
+        string? refPayload = null;
+        decimal? montoRecibido = null;
+
+        if (_metodoPago == "mixto")
+        {
+            montoRecibido = _efectivoRecibidoMixto ?? _montoEfectivoMixto;
+            var mixtoObj = new
+            {
+                monto_efectivo = _montoEfectivoMixto,
+                monto_qr = _montoQrMixto,
+                efectivo_recibido = montoRecibido,
+                referencia_qr = $"Liquidación Mesa {Mesa.Numero}"
+            };
+            refPayload = System.Text.Json.JsonSerializer.Serialize(mixtoObj);
+        }
+        else if (_metodoPago == "efectivo")
+        {
+            montoRecibido = _montoRecibido ?? TotalFinal;
+        }
+        else
+        {
+            montoRecibido = TotalFinal;
+        }
+
+        var exito = await Supabase.LiquidarSesionMesaAsync(
+            Mesa.SesionActiva.Id,
+            _cajaAbierta.Id,
+            _metodoPago,
+            montoRecibido,
+            _descuento,
+            refPayload
+        );
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add($"Mesa {Mesa.Numero} liquidada y liberada con éxito", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al liquidar la mesa", Severity.Error);
+        }
+    }
+}

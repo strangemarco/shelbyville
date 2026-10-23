@@ -1,0 +1,327 @@
+@page "/usuarios"
+@inject SupabaseService Supabase
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="d-flex flex-column gap-5">
+    <!-- Header Principal -->
+    <div class="d-flex flex-column flex-md-row justify-space-between align-start align-md-center gap-4">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold); letter-spacing: 0.5px;">
+                GESTIÓN DE PERSONAL Y USUARIOS
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Administración de cuentas de acceso, roles del sistema, credenciales y estados del personal del club.
+            </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PersonAdd" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" OnClick="AbrirModalNuevoUsuario">
+                + Nuevo Empleado
+            </MudButton>
+            <MudTooltip Text="Actualizar lista">
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarDatosAsync" />
+            </MudTooltip>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Métricas del Personal -->
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Total Personal</div>
+                    <div class="font-heading text-gold mt-1 tabular-nums" style="font-size: 26px; font-weight: 800;">
+                        @_perfiles.Count
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(212, 175, 55, 0.15); border-radius: 12px; border: 1px solid rgba(212, 175, 55, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Tertiary" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Personal Activo</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 26px; font-weight: 800; color: var(--status-disponible);">
+                        @_perfiles.Count(p => p.Activo)
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(34, 197, 94, 0.15); border-radius: 12px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Administración</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 26px; font-weight: 800; color: #38BDF8;">
+                        @_perfiles.Count(p => p.RolId == "admin" || p.RolId == "supervisor")
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(56, 189, 248, 0.15); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Info" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Caja y Operaciones</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 26px; font-weight: 800; color: var(--status-pausada);">
+                        @_perfiles.Count(p => p.RolId == "cajero" || p.RolId == "mesero" || p.RolId == "bartender")
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(245, 158, 11, 0.15); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.PointOfSale" Color="Color.Warning" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Filtros de Módulos y Búsqueda -->
+    <div class="shelby-card pa-4" style="background: var(--bg-surface);">
+        <div class="d-flex flex-column flex-md-row justify-space-between align-start align-md-center gap-3">
+            <div class="d-flex flex-wrap gap-2">
+                <MudButton Variant="@(_filtroRol == "todos" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => _filtroRol = "todos")">
+                    Todos (@_perfiles.Count)
+                </MudButton>
+                @foreach (var r in _roles)
+                {
+                    var count = _perfiles.Count(p => p.RolId.Equals(r.Id, StringComparison.OrdinalIgnoreCase));
+                    <MudButton Variant="@(_filtroRol == r.Id ? Variant.Filled : Variant.Outlined)" Color="Color.Default" Size="Size.Small" OnClick="@(() => _filtroRol = r.Id)">
+                        @r.Nombre (@count)
+                    </MudButton>
+                }
+            </div>
+
+            <MudTextField @bind-Value="_busqueda" Placeholder="Buscar por nombre, correo o teléfono..." Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 280px;" />
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- Tabla de Usuarios -->
+        <MudTable Items="PerfilesFiltrados" Dense="true" Hover="true" Elevation="1" Class="shelby-card" Style="background: var(--bg-surface);">
+            <HeaderContent>
+                <MudTh>Empleado / Usuario</MudTh>
+                <MudTh>Rol de Acceso</MudTh>
+                <MudTh>Teléfono / Contacto</MudTh>
+                <MudTh>Fecha Registro</MudTh>
+                <MudTh Style="text-align: center;">Estado</MudTh>
+                <MudTh Style="text-align: right;">Acciones</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Empleado">
+                    <div class="d-flex align-center gap-3">
+                        <div style="@ObtenerAvatarEstilo(context.RolId)">
+                            @ObtenerIniciales(context.NombreCompleto)
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; color: var(--text-primary); font-size: 14px;">
+                                @context.NombreCompleto
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary); font-family: monospace;">
+                                @(string.IsNullOrWhiteSpace(context.Email) ? "Sin correo asignado" : context.Email)
+                            </div>
+                        </div>
+                    </div>
+                </MudTd>
+
+                <MudTd DataLabel="Rol">
+                    @{
+                        var (badgeBg, badgeColor, icon, nombreRol) = ObtenerEstiloRol(context.RolId);
+                    }
+                    <div class="d-inline-flex align-center gap-1 px-2 py-1" style="background: @badgeBg; color: @badgeColor; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                        <MudIcon Icon="@icon" Size="Size.Small" Style="font-size: 14px;" />
+                        <span>@nombreRol</span>
+                    </div>
+                </MudTd>
+
+                <MudTd DataLabel="Teléfono" Style="font-size: 13px; color: var(--text-secondary);">
+                    @if (!string.IsNullOrWhiteSpace(context.Telefono))
+                    {
+                        <div class="d-flex align-center gap-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Style="font-size: 14px; color: var(--color-gold);" />
+                            <span>@context.Telefono</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <span style="color: var(--text-muted);">-</span>
+                    }
+                </MudTd>
+
+                <MudTd DataLabel="Registro" Style="color: var(--text-secondary); font-size: 12px;" Class="tabular-nums">
+                    @context.CreadoEn.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                </MudTd>
+
+                <MudTd DataLabel="Estado" Style="text-align: center;">
+                    <MudSwitch T="bool" Value="@context.Activo" ValueChanged="@((bool val) => AlternarActivoAsync(context, val))" Color="Color.Success">
+                        <span style="font-size: 12px; font-weight: 600; color: @(context.Activo ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                            @(context.Activo ? "Activo" : "Inactivo")
+                        </span>
+                    </MudSwitch>
+                </MudTd>
+
+                <MudTd DataLabel="Acciones" Style="text-align: right;">
+                    <div class="d-flex justify-end gap-1">
+                        <MudTooltip Text="Editar Perfil y Rol">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Tertiary" OnClick="@(() => AbrirModalEditarUsuario(context))" />
+                        </MudTooltip>
+                        <MudTooltip Text="Cambiar Contraseña">
+                            <MudIconButton Icon="@Icons.Material.Filled.LockReset" Size="Size.Small" Color="Color.Warning" OnClick="@(() => AbrirModalPasswordUsuario(context))" />
+                        </MudTooltip>
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="pa-8 text-center" style="color: var(--text-secondary);">
+                    <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Large" Class="mb-2" />
+                    <div>No se encontraron usuarios con los filtros indicados.</div>
+                </div>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 8, 15, 25, 50 }"
+                               RowsPerPageString="Usuarios por página:"
+                               InfoFormat="{first_item}-{last_item} de {all_items}"
+                               AllItemsText="Todos" />
+            </PagerContent>
+        </MudTable>
+    }
+</div>
+
+@code {
+    private List<PerfilModel> _perfiles = new();
+    private List<RoleModel> _roles = new();
+    private bool _cargando = true;
+    private string _filtroRol = "todos";
+    private string _busqueda = string.Empty;
+
+    private IEnumerable<PerfilModel> PerfilesFiltrados =>
+        _perfiles.Where(p =>
+        {
+            var matchRol = _filtroRol == "todos" || p.RolId.Equals(_filtroRol, StringComparison.OrdinalIgnoreCase);
+            var matchBusqueda = string.IsNullOrWhiteSpace(_busqueda) ||
+                p.NombreCompleto.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) ||
+                (p.Email != null && p.Email.Contains(_busqueda, StringComparison.OrdinalIgnoreCase)) ||
+                (p.Telefono != null && p.Telefono.Contains(_busqueda, StringComparison.OrdinalIgnoreCase));
+
+            return matchRol && matchBusqueda;
+        });
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        _cargando = true;
+        _roles = await Supabase.GetRolesAsync();
+        _perfiles = await Supabase.GetPerfilesAsync();
+        _cargando = false;
+    }
+
+    private async Task AbrirModalNuevoUsuario()
+    {
+        var parameters = new DialogParameters<ModalUsuario>
+        {
+            { x => x.Perfil, null },
+            { x => x.Roles, _roles }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalUsuario>("Registrar Nuevo Empleado", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task AbrirModalEditarUsuario(PerfilModel perfil)
+    {
+        var parameters = new DialogParameters<ModalUsuario>
+        {
+            { x => x.Perfil, perfil },
+            { x => x.Roles, _roles }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalUsuario>($"Editar Empleado: {perfil.NombreCompleto}", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task AbrirModalPasswordUsuario(PerfilModel perfil)
+    {
+        var parameters = new DialogParameters<ModalPasswordUsuario>
+        {
+            { x => x.Perfil, perfil }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<ModalPasswordUsuario>($"Resetear Contraseña - {perfil.NombreCompleto}", parameters, options);
+    }
+
+    private async Task AlternarActivoAsync(PerfilModel perfil, bool nuevoEstado)
+    {
+        var exito = await Supabase.AdminAlternarActivoUsuarioAsync(perfil.Id, nuevoEstado);
+        if (exito)
+        {
+            perfil.Activo = nuevoEstado;
+            Snackbar.Add(nuevoEstado ? $"Usuario '{perfil.NombreCompleto}' activado" : $"Usuario '{perfil.NombreCompleto}' desactivado", Severity.Info);
+        }
+        else
+        {
+            Snackbar.Add("Error al cambiar el estado del usuario", Severity.Error);
+        }
+    }
+
+    private string ObtenerIniciales(string nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return "U";
+        var partes = nombre.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length == 1) return partes[0].Substring(0, Math.Min(2, partes[0].Length)).ToUpperInvariant();
+        return $"{partes[0][0]}{partes[1][0]}".ToUpperInvariant();
+    }
+
+    private string ObtenerAvatarEstilo(string? rolId)
+    {
+        var (badgeBg, badgeColor, _, _) = ObtenerEstiloRol(rolId);
+        return $"width: 38px; height: 38px; border-radius: 10px; background: {badgeBg}; color: {badgeColor}; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; border: 1px solid {badgeColor};";
+    }
+
+    private (string Bg, string Color, string Icon, string Nombre) ObtenerEstiloRol(string? rolId)
+    {
+        var rol = _roles.FirstOrDefault(r => r.Id.Equals(rolId, StringComparison.OrdinalIgnoreCase));
+        var nombre = rol?.Nombre ?? (rolId ?? "Operador").ToUpperInvariant();
+
+        return (rolId ?? string.Empty).ToLowerInvariant() switch
+        {
+            "admin" => ("rgba(212, 175, 55, 0.15)", "#D4AF37", Icons.Material.Filled.AdminPanelSettings, nombre),
+            "supervisor" => ("rgba(56, 189, 248, 0.15)", "#38BDF8", Icons.Material.Filled.Security, nombre),
+            "cajero" => ("rgba(34, 197, 94, 0.15)", "#22C55E", Icons.Material.Filled.PointOfSale, nombre),
+            "mesero" => ("rgba(245, 158, 11, 0.15)", "#F59E0B", Icons.Material.Filled.RoomService, nombre),
+            "bartender" => ("rgba(168, 85, 247, 0.15)", "#A855F7", Icons.Material.Filled.LocalBar, nombre),
+            _ => ("rgba(107, 114, 128, 0.15)", "#9CA3AF", Icons.Material.Filled.Person, nombre)
+        };
+    }
+}

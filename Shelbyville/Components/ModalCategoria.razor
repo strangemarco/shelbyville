@@ -1,0 +1,168 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Category" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">
+                @(_esNuevo ? "Nueva Categoría" : "Editar Categoría")
+            </MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-4 py-2" style="max-height: 520px; overflow-y: auto;">
+            <!-- Nombre de Categoría -->
+            <MudTextField @bind-Value="_nombre" Label="Nombre de la Categoría" Required="true" Variant="Variant.Outlined" Placeholder="Ej. Cervezas Artesanales" AutoFocus="true" Immediate="true" />
+
+            <!-- Descripción -->
+            <MudTextField @bind-Value="_descripcion" Label="Descripción (Opcional)" Lines="2" Variant="Variant.Outlined" Placeholder="Breve detalle de los artículos agrupados aquí..." />
+
+            <!-- Selector de Icono visual -->
+            <div>
+                <MudText Typo="Typo.caption" Style="color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">
+                    Seleccionar Icono:
+                </MudText>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var (iconoKey, iconoVal, label) in _iconosDisponibles)
+                    {
+                        var isSelected = _iconoSeleccionado == iconoKey;
+                        <div @onclick="@(() => _iconoSeleccionado = iconoKey)"
+                             class="pa-2 d-flex flex-column align-center justify-center cursor-pointer"
+                             style="width: 70px; height: 65px; border-radius: 8px; border: 2px solid @(isSelected ? "var(--color-gold)" : "var(--border-color)"); background: @(isSelected ? "rgba(212, 175, 55, 0.15)" : "var(--bg-elevated)"); transition: all 0.2s ease;">
+                            <MudIcon Icon="@iconoVal" Size="Size.Medium" Style="@(isSelected ? "color: var(--color-gold);" : "color: var(--text-secondary);")" />
+                            <span style="font-size: 10px; margin-top: 4px; color: @(isSelected ? "var(--color-gold)" : "var(--text-secondary)"); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px;">
+                                @label
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Orden y Estado Activo -->
+            <div class="d-flex gap-4 align-center">
+                <MudNumericField @bind-Value="_orden" Label="Orden de Despliegue" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="999" Style="max-width: 150px;" />
+                
+                <MudSwitch @bind-Value="_activo" Color="Color.Success" Class="mt-2">
+                    <span style="font-size: 14px; font-weight: 600; color: @(_activo ? "var(--status-disponible)" : "var(--text-secondary)");">
+                        @(_activo ? "Categoría Activa" : "Categoría Inactiva")
+                    </span>
+                </MudSwitch>
+            </div>
+
+            <!-- Vista previa en tiempo real -->
+            <div class="pa-3" style="background: var(--bg-surface); border: 1px dashed var(--border-color); border-radius: 8px;">
+                <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 6px;">
+                    Vista previa de etiqueta:
+                </div>
+                <div class="d-flex align-center gap-2">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(212, 175, 55, 0.15); border: 1px solid rgba(212, 175, 55, 0.3); display: flex; align-items: center; justify-content: center;">
+                        <MudIcon Icon="@ObtenerIconoMaterial(_iconoSeleccionado)" Size="Size.Small" Style="color: var(--color-gold);" />
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
+                            @(string.IsNullOrWhiteSpace(_nombre) ? "Nombre de la Categoría" : _nombre)
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">
+                            @(string.IsNullOrWhiteSpace(_descripcion) ? "Sin descripción" : _descripcion)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="GuardarAsync" Disabled="_procesando" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Guardando...</span>
+            }
+            else
+            {
+                <span>@(_esNuevo ? "Crear Categoría" : "Guardar Cambios")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public CategoriaModel? Categoria { get; set; }
+
+    private bool _esNuevo => Categoria == null || Categoria.Id == Guid.Empty;
+    private string _nombre = string.Empty;
+    private string? _descripcion;
+    private string _iconoSeleccionado = "Layers";
+    private int _orden = 1;
+    private bool _activo = true;
+    private bool _procesando;
+
+    private readonly List<(string Key, string Icon, string Label)> _iconosDisponibles = new()
+    {
+        ("Beer", Icons.Material.Filled.SportsBar, "Cervezas"),
+        ("Wine", Icons.Material.Filled.WineBar, "Licores"),
+        ("CupSoda", Icons.Material.Filled.LocalDrink, "Gaseosas"),
+        ("Utensils", Icons.Material.Filled.Restaurant, "Piqueos"),
+        ("Fastfood", Icons.Material.Filled.Fastfood, "Comida"),
+        ("Coffee", Icons.Material.Filled.LocalCafe, "Café"),
+        ("Package", Icons.Material.Filled.Inventory2, "Varios"),
+        ("SportsScore", Icons.Material.Filled.SportsScore, "Billar"),
+        ("Layers", Icons.Material.Filled.Layers, "General")
+    };
+
+    protected override void OnInitialized()
+    {
+        if (Categoria != null)
+        {
+            _nombre = Categoria.Nombre;
+            _descripcion = Categoria.Descripcion;
+            _iconoSeleccionado = string.IsNullOrWhiteSpace(Categoria.Icono) ? "Layers" : Categoria.Icono;
+            _orden = Categoria.Orden;
+            _activo = Categoria.Activo;
+        }
+    }
+
+    private string ObtenerIconoMaterial(string iconoKey)
+    {
+        var found = _iconosDisponibles.FirstOrDefault(i => i.Key.Equals(iconoKey, StringComparison.OrdinalIgnoreCase));
+        return found.Icon ?? Icons.Material.Filled.Layers;
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nombre))
+        {
+            Snackbar.Add("El nombre de la categoría es obligatorio", Severity.Warning);
+            return;
+        }
+
+        _procesando = true;
+
+        var cat = Categoria ?? new CategoriaModel();
+        cat.Nombre = _nombre.Trim();
+        cat.Descripcion = _descripcion?.Trim();
+        cat.Icono = _iconoSeleccionado;
+        cat.Orden = _orden;
+        cat.Activo = _activo;
+
+        var exito = await Supabase.GuardarCategoriaAsync(cat);
+        _procesando = false;
+
+        if (exito)
+        {
+            Snackbar.Add(_esNuevo ? "Categoría creada con éxito" : "Categoría actualizada con éxito", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al guardar la categoría", Severity.Error);
+        }
+    }
+}

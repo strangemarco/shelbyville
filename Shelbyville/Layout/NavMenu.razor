@@ -1,0 +1,147 @@
+@inject NavigationManager Navigation
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<div class="d-flex flex-column h-100" style="background-color: var(--bg-sidebar); border-right: 1px solid var(--border-color);">
+    <!-- Navigation Links -->
+    <div class="flex-grow-1 px-3 py-4">
+        <MudNavMenu Color="Color.Tertiary" Rounded="true" Margin="Margin.Dense">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                <span style="font-weight: 500;">Dashboard</span>
+            </MudNavLink>
+            <MudNavLink Href="/mesas" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SportsScore">
+                <span style="font-weight: 600;">Control de Mesas</span>
+            </MudNavLink>
+            <MudNavLink Href="/pos" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PointOfSale">
+                <span style="font-weight: 500;">Punto de Venta</span>
+            </MudNavLink>
+            <MudNavLink Href="/productos" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalBar">
+                <span style="font-weight: 500;">Bebidas & Productos</span>
+            </MudNavLink>
+            <MudNavLink Href="/categorias" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Category">
+                <span style="font-weight: 500;">Categorías</span>
+            </MudNavLink>
+            <MudNavLink Href="/inventario" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory2">
+                <span style="font-weight: 500;">Inventario</span>
+            </MudNavLink>
+            <MudNavLink Href="/caja" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+                <span style="font-weight: 500;">Caja y Turno</span>
+            </MudNavLink>
+            <MudNavLink Href="/reportes" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">
+                <span style="font-weight: 500;">Reportes</span>
+            </MudNavLink>
+            <MudNavLink Href="/movimientos" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.History">
+                <span style="font-weight: 500;">Movimientos</span>
+            </MudNavLink>
+            <MudNavLink Href="/usuarios" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">
+                <span style="font-weight: 500;">Personal & Roles</span>
+            </MudNavLink>
+            <MudNavLink Href="/configuracion" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">
+                <span style="font-weight: 500;">Configuración</span>
+            </MudNavLink>
+        </MudNavMenu>
+    </div>
+
+    <!-- Sección de Sesión de Usuario en Sidebar -->
+    @if (_perfil != null || Supabase.EstaAutenticado)
+    {
+        <div class="px-3 pb-3" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <div class="d-flex align-center gap-3 pa-2 mb-2" style="background: rgba(28, 41, 35, 0.6); border: 1px solid var(--border-color); border-radius: 12px;">
+                <MudAvatar Color="Color.Tertiary" Size="Size.Medium" Style="background: var(--color-gold); color: #0B1210; font-weight: 800; font-size: 13px; min-width: 36px; height: 36px;">
+                    @ObtenerIniciales(_perfil?.NombreCompleto ?? Supabase.UsuarioActual?.Email)
+                </MudAvatar>
+                <div class="d-flex flex-column" style="min-width: 0; flex-grow: 1; line-height: 1.2;">
+                    <span style="font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="@(_perfil?.NombreCompleto ?? Supabase.UsuarioActual?.Email)">
+                        @(_perfil?.NombreCompleto ?? Supabase.UsuarioActual?.Email ?? "Usuario")
+                    </span>
+                    <div class="d-flex align-center gap-1 mt-1">
+                        <span style="font-size: 10px; font-weight: 800; color: #0B1210; background: var(--color-gold); padding: 1px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            @(_perfil?.RolId?.ToUpper() ?? "ADMIN")
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Error" 
+                       StartIcon="@Icons.Material.Filled.Logout" 
+                       OnClick="CerrarSesionAsync" 
+                       FullWidth="true" 
+                       Size="Size.Small"
+                       Style="text-transform: none; font-weight: 600; border-color: rgba(239, 68, 68, 0.4); color: #FCA5A5; background: rgba(239, 68, 68, 0.08);">
+                Cerrar Sesión
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <div class="px-3 pb-3" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <MudButton Variant="Variant.Filled" 
+                       StartIcon="@Icons.Material.Filled.Login" 
+                       OnClick="@(() => Navigation.NavigateTo("/login"))" 
+                       FullWidth="true" 
+                       Size="Size.Small"
+                       Style="background: var(--color-gold); color: #0B1210; font-weight: 700; text-transform: none; border-radius: 8px;">
+                Iniciar Sesión
+            </MudButton>
+        </div>
+    }
+
+    <!-- Footer info -->
+    <div class="pa-4" style="border-top: 1px solid var(--border-color); font-size: 11px; color: var(--text-muted); text-align: center;">
+        <div>Shelbyville v1.0</div>
+        <div>Blazor WASM + Supabase</div>
+    </div>
+</div>
+
+@code {
+    private PerfilModel? _perfil;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Supabase.OnAuthStateChange += OnAuthChanged;
+        await CargarPerfilAsync();
+    }
+
+    private void OnAuthChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await CargarPerfilAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task CargarPerfilAsync()
+    {
+        try
+        {
+            _perfil = await Supabase.GetPerfilUsuarioAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cargando perfil en NavMenu: {ex.Message}");
+        }
+    }
+
+    private string ObtenerIniciales(string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return "U";
+        var partes = nombre.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length == 1) return partes[0].Substring(0, Math.Min(2, partes[0].Length)).ToUpperInvariant();
+        return $"{partes[0][0]}{partes[1][0]}".ToUpperInvariant();
+    }
+
+    private async Task CerrarSesionAsync()
+    {
+        await Supabase.SignOutAsync();
+        Snackbar.Add("Sesión finalizada", Severity.Info);
+        Navigation.NavigateTo("/login");
+    }
+
+    public void Dispose()
+    {
+        Supabase.OnAuthStateChange -= OnAuthChanged;
+    }
+}

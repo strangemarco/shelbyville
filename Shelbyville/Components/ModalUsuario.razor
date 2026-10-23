@@ -1,0 +1,178 @@
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@(_esNuevo ? Icons.Material.Filled.PersonAdd : Icons.Material.Filled.ManageAccounts)" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h6" Class="font-heading">
+                @(_esNuevo ? "Nuevo Empleado / Usuario" : $"Editar Usuario: {Perfil?.NombreCompleto}")
+            </MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex flex-column gap-3 py-2">
+            
+            @if (_esNuevo)
+            {
+                <MudTextField @bind-Value="_email" Label="Correo Electrónico (Acceso)" Placeholder="ejemplo@shelbyville.com" Required="true" Variant="Variant.Outlined" InputType="InputType.Email" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Email" />
+
+                <MudTextField @bind-Value="_password" Label="Contraseña de Acceso" Placeholder="Mínimo 6 caracteres" Required="true" Variant="Variant.Outlined" InputType="_mostrarPassword ? InputType.Text : InputType.Password" Adornment="Adornment.End" AdornmentIcon="@(_mostrarPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)" OnAdornmentClick="@(() => _mostrarPassword = !_mostrarPassword)" HelperText="La contraseña que usará el empleado para iniciar sesión en el sistema." />
+            }
+            else
+            {
+                <div class="pa-3" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 8px;">
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Cuenta de Correo</div>
+                    <div class="d-flex align-center gap-2 mt-1">
+                        <MudIcon Icon="@Icons.Material.Filled.AlternateEmail" Size="Size.Small" Color="Color.Tertiary" />
+                        <span style="font-family: monospace; font-size: 14px; color: var(--color-gold); font-weight: 600;">
+                            @(_email ?? "Sin correo registrado")
+                        </span>
+                    </div>
+                </div>
+            }
+
+            <MudTextField @bind-Value="_nombreCompleto" Label="Nombre y Apellido Completo" Placeholder="Ej. Carlos Mendoza" Required="true" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge" />
+
+            <div class="d-flex gap-3">
+                <MudSelect T="string" Label="Rol del Sistema" @bind-Value="_rolId" Required="true" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="flex-grow-1" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AdminPanelSettings">
+                    @foreach (var r in Roles)
+                    {
+                        <MudSelectItem T="string" Value="@r.Id">
+                            @r.Nombre
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudTextField @bind-Value="_telefono" Label="Teléfono / WhatsApp" Placeholder="70012345" Variant="Variant.Outlined" Style="max-width: 170px;" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Phone" />
+            </div>
+
+            <!-- Descripción del rol seleccionado -->
+            @{
+                var rolSeleccionado = Roles.FirstOrDefault(r => r.Id.Equals(_rolId, StringComparison.OrdinalIgnoreCase));
+            }
+            @if (rolSeleccionado != null)
+            {
+                <div class="pa-2 px-3" style="background: rgba(212, 175, 55, 0.08); border-radius: 6px; border-left: 3px solid var(--color-gold); font-size: 12px; color: var(--text-secondary);">
+                    <b>@rolSeleccionado.Nombre:</b> @(rolSeleccionado.Descripcion ?? "Sin descripción.")
+                </div>
+            }
+
+            <div class="pa-3 mt-1" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                <MudSwitch @bind-Value="_activo" Color="Color.Success">
+                    <span style="font-size: 13px; font-weight: 600; color: @(_activo ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                        @(_activo ? "Usuario Activo (Permite ingreso al sistema)" : "Usuario Desactivado / Inactivo")
+                    </span>
+                </MudSwitch>
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="GuardarAsync" Disabled="_procesando" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;">
+            @if (_procesando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Guardando...</span>
+            }
+            else
+            {
+                <span>@(_esNuevo ? "Registrar Empleado" : "Guardar Cambios")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public PerfilModel? Perfil { get; set; }
+
+    [Parameter]
+    public List<RoleModel> Roles { get; set; } = new();
+
+    private bool _esNuevo => Perfil == null || Perfil.Id == Guid.Empty;
+
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private bool _mostrarPassword;
+    private string _nombreCompleto = string.Empty;
+    private string _rolId = "cajero";
+    private string? _telefono;
+    private bool _activo = true;
+    private bool _procesando;
+
+    protected override void OnInitialized()
+    {
+        if (Perfil != null)
+        {
+            _email = Perfil.Email ?? string.Empty;
+            _nombreCompleto = Perfil.NombreCompleto;
+            _rolId = Perfil.RolId ?? "cajero";
+            _telefono = Perfil.Telefono;
+            _activo = Perfil.Activo;
+        }
+        else if (Roles.Any())
+        {
+            _rolId = Roles.FirstOrDefault(r => r.Id == "cajero")?.Id ?? Roles.First().Id;
+        }
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nombreCompleto))
+        {
+            Snackbar.Add("El nombre completo es obligatorio", Severity.Warning);
+            return;
+        }
+
+        if (_esNuevo)
+        {
+            if (string.IsNullOrWhiteSpace(_email) || !_email.Contains('@'))
+            {
+                Snackbar.Add("Ingresa un correo electrónico válido", Severity.Warning);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_password) || _password.Length < 6)
+            {
+                Snackbar.Add("La contraseña debe tener al menos 6 caracteres", Severity.Warning);
+                return;
+            }
+
+            _procesando = true;
+            var (exito, mensaje) = await Supabase.AdminCrearUsuarioAsync(_email, _password, _nombreCompleto, _rolId, _telefono);
+            _procesando = false;
+
+            if (exito)
+            {
+                Snackbar.Add($"Usuario '{_nombreCompleto}' registrado exitosamente", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add($"Error al registrar usuario: {mensaje ?? "Verifica la base de datos"}", Severity.Error);
+            }
+        }
+        else
+        {
+            _procesando = true;
+            var exito = await Supabase.AdminActualizarPerfilAsync(Perfil!.Id, _nombreCompleto, _rolId, _telefono, _activo);
+            _procesando = false;
+
+            if (exito)
+            {
+                Snackbar.Add("Perfil de usuario actualizado correctamente", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add("Error al actualizar perfil de usuario", Severity.Error);
+            }
+        }
+    }
+}

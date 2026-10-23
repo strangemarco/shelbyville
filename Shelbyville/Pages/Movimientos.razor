@@ -1,0 +1,257 @@
+@page "/movimientos"
+@inject SupabaseService Supabase
+@inject ISnackbar Snackbar
+
+<div class="d-flex flex-column gap-5">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold);">
+                BITÁCORA Y MOVIMIENTOS
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Auditoría y trazabilidad en vivo de todas las operaciones: mesas, cobros, caja e inventario.
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-center">
+            <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarMovimientosAsync">
+                Actualizar
+            </MudButton>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Resumen Operativo -->
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Total Movimientos</div>
+                    <div class="font-heading text-gold mt-1 tabular-nums" style="font-size: 24px; font-weight: 800;">
+                        @_movimientos.Count
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(212, 175, 55, 0.15); border-radius: 12px; border: 1px solid rgba(212, 175, 55, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Tertiary" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Operaciones en Mesas</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 24px; font-weight: 800; color: var(--status-disponible);">
+                        @_movimientos.Count(m => m.Modulo == "Mesas")
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(34, 197, 94, 0.15); border-radius: 12px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsScore" Color="Color.Success" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Ventas y Cobros</div>
+                    <div class="font-heading mt-1 tabular-nums" style="font-size: 24px; font-weight: 800; color: var(--status-reservada);">
+                        @_movimientos.Count(m => m.Modulo == "Ventas")
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(56, 189, 248, 0.15); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Info" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <div class="shelby-card pa-4 d-flex justify-space-between align-center">
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Monto Total Operado</div>
+                    <div class="font-heading text-gold mt-1 tabular-nums" style="font-size: 24px; font-weight: 800;">
+                        Bs. @_movimientos.Where(m => m.Monto.HasValue).Sum(m => m.Monto!.Value).ToString("N2")
+                    </div>
+                </div>
+                <div class="pa-3" style="background: rgba(212, 175, 55, 0.15); border-radius: 12px; border: 1px solid rgba(212, 175, 55, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Tertiary" Size="Size.Medium" />
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Barra de Filtros Rápidos por Módulo y Búsqueda -->
+    <div class="shelby-card pa-4" style="background: var(--bg-surface);">
+        <div class="d-flex flex-column flex-md-row gap-3 justify-space-between align-start align-md-center">
+            <!-- Pestañas de módulos -->
+            <div class="d-flex flex-wrap gap-2">
+                <MudButton Variant="@(_moduloFiltro == "todos" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => FiltrarModulo("todos"))">
+                    Todos (@_movimientos.Count)
+                </MudButton>
+                <MudButton Variant="@(_moduloFiltro == "Mesas" ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.SportsScore" OnClick="@(() => FiltrarModulo("Mesas"))">
+                    Mesas (@_movimientos.Count(m => m.Modulo == "Mesas"))
+                </MudButton>
+                <MudButton Variant="@(_moduloFiltro == "Ventas" ? Variant.Filled : Variant.Outlined)" Color="Color.Info" Size="Size.Small" StartIcon="@Icons.Material.Filled.PointOfSale" OnClick="@(() => FiltrarModulo("Ventas"))">
+                    Ventas (@_movimientos.Count(m => m.Modulo == "Ventas"))
+                </MudButton>
+                <MudButton Variant="@(_moduloFiltro == "Caja" ? Variant.Filled : Variant.Outlined)" Color="Color.Warning" Size="Size.Small" StartIcon="@Icons.Material.Filled.AccountBalanceWallet" OnClick="@(() => FiltrarModulo("Caja"))">
+                    Caja (@_movimientos.Count(m => m.Modulo == "Caja"))
+                </MudButton>
+                <MudButton Variant="@(_moduloFiltro == "Inventario" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Inventory2" OnClick="@(() => FiltrarModulo("Inventario"))">
+                    Inventario (@_movimientos.Count(m => m.Modulo == "Inventario"))
+                </MudButton>
+            </div>
+
+            <!-- Buscador -->
+            <MudTextField @bind-Value="_busqueda" Placeholder="Buscar por detalle, cliente, ticket o mesa..." Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 280px;" />
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- Tabla / Timeline de Movimientos -->
+        <MudTable Items="MovimientosFiltrados" Dense="true" Hover="true" Elevation="1" Class="shelby-card" Style="background: var(--bg-surface);">
+            <HeaderContent>
+                <MudTh Style="width: 170px;">Fecha y Hora</MudTh>
+                <MudTh Style="width: 130px;">Módulo</MudTh>
+                <MudTh>Operación / Título</MudTh>
+                <MudTh>Detalles de la Operación</MudTh>
+                <MudTh Style="text-align: right; width: 130px;">Importe</MudTh>
+                <MudTh Style="text-align: center; width: 120px;">Estado</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Fecha" Style="color: var(--text-secondary); font-size: 13px;" Class="tabular-nums">
+                    <div style="font-weight: 600; color: var(--text-primary);">
+                        @context.Fecha.ToLocalTime().ToString("dd/MM/yyyy")
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">
+                        @context.Fecha.ToLocalTime().ToString("HH:mm:ss")
+                    </div>
+                </MudTd>
+
+                <MudTd DataLabel="Módulo">
+                    @{
+                        var (badgeBg, badgeColor, icon) = ObtenerEstiloModulo(context.Modulo);
+                    }
+                    <div class="d-inline-flex align-center gap-1 px-2 py-1" style="background: @badgeBg; color: @badgeColor; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                        <MudIcon Icon="@icon" Size="Size.Small" Style="font-size: 14px;" />
+                        <span>@context.Modulo</span>
+                    </div>
+                </MudTd>
+
+                <MudTd DataLabel="Operación">
+                    <div style="font-weight: 700; color: var(--text-primary); font-size: 14px;">
+                        @context.Titulo
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">
+                        Tipo: <span style="font-family: monospace;">@context.Tipo</span>
+                    </div>
+                </MudTd>
+
+                <MudTd DataLabel="Detalles" Style="color: var(--text-secondary); font-size: 13px;">
+                    @context.Detalle
+                </MudTd>
+
+                <MudTd DataLabel="Importe" Style="text-align: right;" Class="tabular-nums font-heading">
+                    @if (context.Monto.HasValue && context.Monto.Value > 0)
+                    {
+                        <span style="font-weight: 700; font-size: 15px; color: var(--color-gold);">
+                            Bs. @context.Monto.Value.ToString("N2")
+                        </span>
+                    }
+                    else if (context.Monto.HasValue && context.Monto.Value == 0)
+                    {
+                        <span style="color: var(--text-secondary); font-size: 13px;">Bs. 0.00</span>
+                    }
+                    else
+                    {
+                        <span style="color: var(--text-muted); font-size: 13px;">-</span>
+                    }
+                </MudTd>
+
+                <MudTd DataLabel="Estado" Style="text-align: center;">
+                    @{
+                        var estadoUpper = (context.Estado ?? "OK").ToUpperInvariant();
+                        var estiloEstado = estadoUpper switch
+                        {
+                            "ACTIVA" or "EN JUEGO" => "background: rgba(34, 197, 94, 0.15); color: #22C55E;",
+                            "PAUSADA" => "background: rgba(245, 158, 11, 0.15); color: #F59E0B;",
+                            "PAGADA" or "FINALIZADA" or "COMPLETADO" or "REGISTRADO" => "background: rgba(56, 189, 248, 0.15); color: #38BDF8;",
+                            "PENDIENTE_PAGO" => "background: rgba(239, 68, 68, 0.15); color: #EF4444;",
+                            _ => "background: rgba(107, 114, 128, 0.15); color: #9CA3AF;"
+                        };
+                    }
+                    <span class="px-2 py-1" style="@estiloEstado border-radius: 12px; font-size: 11px; font-weight: 700;">
+                        @estadoUpper
+                    </span>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="pa-8 text-center" style="color: var(--text-secondary);">
+                    <MudIcon Icon="@Icons.Material.Filled.HistoryToggleOff" Size="Size.Large" Class="mb-2" />
+                    <div>No se encontraron registros de movimientos con los filtros actuales.</div>
+                </div>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }"
+                               RowsPerPageString="Filas por página:"
+                               InfoFormat="{first_item}-{last_item} de {all_items}"
+                               AllItemsText="Todos" />
+            </PagerContent>
+        </MudTable>
+    }
+</div>
+
+@code {
+    private List<MovimientoSistemaModel> _movimientos = new();
+    private bool _cargando = true;
+    private string _moduloFiltro = "todos";
+    private string _busqueda = string.Empty;
+
+    private IEnumerable<MovimientoSistemaModel> MovimientosFiltrados =>
+        _movimientos.Where(m =>
+        {
+            var matchModulo = _moduloFiltro == "todos" || m.Modulo.Equals(_moduloFiltro, StringComparison.OrdinalIgnoreCase);
+            var matchBusqueda = string.IsNullOrWhiteSpace(_busqueda) ||
+                m.Titulo.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) ||
+                m.Detalle.Contains(_busqueda, StringComparison.OrdinalIgnoreCase) ||
+                m.Tipo.Contains(_busqueda, StringComparison.OrdinalIgnoreCase);
+
+            return matchModulo && matchBusqueda;
+        });
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarMovimientosAsync();
+    }
+
+    private async Task CargarMovimientosAsync()
+    {
+        _cargando = true;
+        _movimientos = await Supabase.GetMovimientosSistemaAsync();
+        _cargando = false;
+    }
+
+    private void FiltrarModulo(string modulo)
+    {
+        _moduloFiltro = modulo;
+    }
+
+    private (string Bg, string Color, string Icon) ObtenerEstiloModulo(string modulo)
+    {
+        return (modulo ?? string.Empty).ToLowerInvariant() switch
+        {
+            "mesas" => ("rgba(34, 197, 94, 0.15)", "#22C55E", Icons.Material.Filled.SportsScore),
+            "ventas" => ("rgba(56, 189, 248, 0.15)", "#38BDF8", Icons.Material.Filled.PointOfSale),
+            "caja" => ("rgba(245, 158, 11, 0.15)", "#F59E0B", Icons.Material.Filled.AccountBalanceWallet),
+            "inventario" => ("rgba(168, 85, 247, 0.15)", "#A855F7", Icons.Material.Filled.Inventory2),
+            "consumos" => ("rgba(212, 175, 55, 0.15)", "#D4AF37", Icons.Material.Filled.LocalBar),
+            _ => ("rgba(107, 114, 128, 0.15)", "#9CA3AF", Icons.Material.Filled.History)
+        };
+    }
+}

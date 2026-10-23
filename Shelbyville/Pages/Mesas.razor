@@ -1,0 +1,444 @@
+@page "/mesas"
+@inject SupabaseService Supabase
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<div class="d-flex flex-column gap-5">
+    <!-- Header de sección y resumen -->
+    <div class="d-flex flex-column flex-md-row justify-space-between align-start align-md-center gap-3">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold); letter-spacing: 0.5px;">
+                CONTROL DE MESAS
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Monitoreo de juego en tiempo real, cronómetros automáticos y gestión de pedidos.
+            </p>
+        </div>
+
+        <!-- Métricas rápidas de mesas -->
+        <div class="d-flex flex-wrap gap-2">
+            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Medium">
+                Total: <b>@_mesas.Count</b>
+            </MudChip>
+            <MudChip T="string" Variant="Variant.Filled" Color="Color.Success" Size="Size.Medium">
+                Disponibles: <b>@_mesas.Count(m => m.Estado == "disponible")</b>
+            </MudChip>
+            <MudChip T="string" Variant="Variant.Filled" Color="Color.Info" Size="Size.Medium">
+                Reservadas: <b>@_mesas.Count(m => m.Estado == "reservada")</b>
+            </MudChip>
+            <MudChip T="string" Variant="Variant.Filled" Color="Color.Error" Size="Size.Medium">
+                En Juego: <b>@_mesas.Count(m => m.Estado == "ocupada")</b>
+            </MudChip>
+            <MudChip T="string" Variant="Variant.Filled" Color="Color.Warning" Size="Size.Medium">
+                Pausadas: <b>@_mesas.Count(m => m.Estado == "pausada")</b>
+            </MudChip>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarMesasAsync" AriaLabel="Actualizar mesas" />
+        </div>
+    </div>
+
+    <!-- Filtros de visualización -->
+    <div class="d-flex gap-2 align-center flex-wrap">
+        <MudChipSet T="string" @bind-SelectedValue="_filtroEstado" CheckMark="false">
+            <MudChip T="string" Value="@("todas")" Color="Color.Tertiary" Variant="@(_filtroEstado == "todas" ? Variant.Filled : Variant.Outlined)">
+                Todas (@_mesas.Count)
+            </MudChip>
+            <MudChip T="string" Value="@("disponible")" Color="Color.Success" Variant="@(_filtroEstado == "disponible" ? Variant.Filled : Variant.Outlined)">
+                Disponibles
+            </MudChip>
+            <MudChip T="string" Value="@("reservada")" Color="Color.Info" Variant="@(_filtroEstado == "reservada" ? Variant.Filled : Variant.Outlined)">
+                Reservadas (@_mesas.Count(m => m.Estado == "reservada"))
+            </MudChip>
+            <MudChip T="string" Value="@("ocupada")" Color="Color.Error" Variant="@(_filtroEstado == "ocupada" ? Variant.Filled : Variant.Outlined)">
+                En Juego
+            </MudChip>
+            <MudChip T="string" Value="@("pausada")" Color="Color.Warning" Variant="@(_filtroEstado == "pausada" ? Variant.Filled : Variant.Outlined)">
+                Pausadas
+            </MudChip>
+        </MudChipSet>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- Grid de Mesas -->
+        <MudGrid Spacing="3">
+            @foreach (var mesa in MesasFiltradas)
+            {
+                var enJuego = mesa.Estado == "ocupada";
+                var pausada = mesa.Estado == "pausada";
+                var reservada = mesa.Estado == "reservada";
+                var disponible = mesa.Estado == "disponible";
+
+                <MudItem xs="12" sm="6" lg="4" xl="3">
+                    <div class="shelby-card pa-4 d-flex flex-column justify-space-between h-100 @(enJuego ? "pulse-ocupada" : "")"
+                         style="background: var(--bg-surface); border: 2px solid @(enJuego ? "rgba(239, 68, 68, 0.6)" : (pausada ? "rgba(245, 158, 11, 0.6)" : (reservada ? "rgba(56, 189, 248, 0.7)" : "var(--border-color)")));">
+                        
+                        <!-- Header de la Tarjeta de Mesa -->
+                        <div class="d-flex justify-space-between align-center mb-3">
+                            <div class="d-flex align-center gap-2">
+                                <span class="font-heading" style="font-size: 20px; font-weight: 800; color: var(--color-gold);">
+                                    MESA @mesa.Numero
+                                </span>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="border-color: var(--border-color); color: var(--text-secondary); font-size: 11px;">
+                                    @mesa.Tipo
+                                </MudChip>
+                            </div>
+
+                            <!-- Estado Badge -->
+                            @if (disponible)
+                            {
+                                <span class="badge-disponible px-3 py-1" style="border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase;">
+                                    Disponible
+                                </span>
+                            }
+                            else if (reservada)
+                            {
+                                <span class="px-3 py-1" style="background: rgba(56, 189, 248, 0.2); color: #38BDF8; border: 1px solid #38BDF8; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase;">
+                                    Reservada
+                                </span>
+                            }
+                            else if (enJuego)
+                            {
+                                <span class="badge-ocupada px-3 py-1" style="border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase;">
+                                    En Juego
+                                </span>
+                            }
+                            else if (pausada)
+                            {
+                                <span class="badge-pausada px-3 py-1" style="border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase;">
+                                    Pausada
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="px-3 py-1" style="background: rgba(107, 114, 128, 0.2); color: #9CA3AF; border-radius: 20px; font-size: 12px; font-weight: 700;">
+                                    Mantenimiento
+                                </span>
+                            }
+                        </div>
+
+                        <!-- Paño de Billar Estilizado (Visual) -->
+                        <div class="pa-3 mb-3 d-flex flex-column justify-center align-center position-relative" 
+                             style="background: radial-gradient(circle at center, #1E6B50 0%, #164F3B 70%, #0F382A 100%); border-radius: 10px; border: 3px solid #34443C; min-height: 110px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.6);">
+                            
+                            @if (disponible)
+                            {
+                                <div style="color: rgba(245, 246, 242, 0.4); text-align: center;">
+                                    <MudIcon Icon="@Icons.Material.Filled.SportsScore" Size="Size.Large" />
+                                    <div style="font-size: 12px; margin-top: 4px; font-weight: 500;">Mesa lista para jugar</div>
+                                    <div style="font-size: 11px; color: var(--color-gold);">Tarifa: Bs. @(mesa.Tarifa?.PrecioPorHora.ToString("N2") ?? "25.00")/hr</div>
+                                </div>
+                            }
+                            else if (reservada)
+                            {
+                                <div style="color: #FFFFFF; text-align: center;">
+                                    <MudIcon Icon="@Icons.Material.Filled.EventSeat" Size="Size.Large" Style="color: #38BDF8;" />
+                                    <div style="font-size: 12px; margin-top: 2px; font-weight: 700; color: #38BDF8; letter-spacing: 1px;">
+                                        RESERVA PROGRAMADA
+                                    </div>
+                                    <div class="font-heading" style="font-size: 14px; color: #FFF; font-weight: 700;">
+                                        👤 @(mesa.ReservaActiva?.ClienteNombre ?? "Cliente")
+                                    </div>
+                                    <div style="font-size: 11px; color: rgba(255, 255, 255, 0.8); margin-top: 2px;">
+                                        🕒 @(mesa.ReservaActiva?.HoraInicio) - @(mesa.ReservaActiva?.HoraFin) (+@(mesa.ReservaActiva?.MinutosToleranciaLlegada ?? 15)m tol.)
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Cronómetro en Vivo -->
+                                <div class="font-heading tabular-nums timer-display" 
+                                     style="font-size: 32px; font-weight: 800; color: #FFFFFF; text-shadow: 0 2px 8px rgba(0,0,0,0.8); letter-spacing: 2px;">
+                                    @mesa.TiempoTranscurridoStr
+                                </div>
+
+                                <div class="d-flex align-center gap-2 mt-1">
+                                    <span style="font-size: 12px; color: #E5C158; font-weight: 600;">
+                                        👤 @(mesa.SesionActiva?.ClienteNombre ?? "Cliente")
+                                    </span>
+                                </div>
+
+                                <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 2px;">
+                                    Tarifa: Bs. @(mesa.Tarifa?.PrecioPorHora.ToString("N2"))/hr
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Estado Financiero si está ocupada o detalles si está reservada -->
+                        @if (reservada)
+                        {
+                            <div class="pa-3 mb-3" style="background: rgba(56, 189, 248, 0.08); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.25);">
+                                <div class="d-flex justify-space-between" style="font-size: 12px; color: var(--text-secondary);">
+                                    <span>Fecha:</span>
+                                    <span style="font-weight: 600; color: var(--text-primary);">@(mesa.ReservaActiva?.Fecha.ToString("dd/MM/yyyy") ?? DateTime.Today.ToString("dd/MM/yyyy"))</span>
+                                </div>
+                                <div class="d-flex justify-space-between mt-1" style="font-size: 12px; color: var(--text-secondary);">
+                                    <span>Teléfono:</span>
+                                    <span style="font-weight: 600; color: var(--text-primary);">@(mesa.ReservaActiva?.Telefono ?? "Sin registrar")</span>
+                                </div>
+                                <div class="d-flex justify-space-between mt-1" style="font-size: 12px; color: var(--text-secondary);">
+                                    <span>Auto-liberación:</span>
+                                    <span style="color: #38BDF8; font-weight: 600;">Automática por inasistencia</span>
+                                </div>
+                            </div>
+                        }
+                        else if (!disponible)
+                        {
+                            <div class="pa-3 mb-3" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
+                                <div class="d-flex justify-space-between" style="font-size: 12px; color: var(--text-secondary);">
+                                    <span>Tiempo de juego:</span>
+                                    <span class="tabular-nums" style="font-weight: 600; color: var(--text-primary);">Bs. @mesa.MontoTiempoCalculado.ToString("N2")</span>
+                                </div>
+                                <div class="d-flex justify-space-between mt-1" style="font-size: 12px; color: var(--text-secondary);">
+                                    <span>Consumos de barra:</span>
+                                    <span class="tabular-nums" style="font-weight: 600; color: var(--text-primary);">Bs. @((mesa.SesionActiva?.MontoConsumos ?? 0).ToString("N2"))</span>
+                                </div>
+                                <MudDivider Class="my-2" />
+                                <div class="d-flex justify-space-between align-center">
+                                    <span style="font-size: 13px; font-weight: 700; color: var(--color-gold);">SUBTOTAL:</span>
+                                    <span class="font-heading text-gold tabular-nums" style="font-size: 18px; font-weight: 800;">
+                                        Bs. @mesa.MontoTotalCalculado.ToString("N2")
+                                    </span>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Botonera de Acciones -->
+                        <div class="d-flex flex-column gap-2 mt-auto">
+                            @if (disponible)
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="btn-touch" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => AbrirModalIniciar(mesa))">
+                                    Iniciar Juego
+                                </MudButton>
+                            }
+                            else if (reservada)
+                            {
+                                <div class="d-flex flex-column gap-2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="btn-touch" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => AbrirModalIniciar(mesa, mesa.ReservaActiva?.ClienteNombre))">
+                                        Iniciar Juego
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true" Size="Size.Small" StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => LiberarReserva(mesa))">
+                                        Liberar Mesa
+                                    </MudButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex gap-2">
+                                    @if (enJuego)
+                                    {
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.Pause" OnClick="@(() => PausarSesion(mesa))">
+                                            Pausar
+                                        </MudButton>
+                                    }
+                                    else if (pausada)
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => ReanudarSesion(mesa))">
+                                            Reanudar
+                                        </MudButton>
+                                    }
+
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" Size="Size.Small" Class="flex-grow-1" StartIcon="@Icons.Material.Filled.LocalBar" OnClick="@(() => AbrirModalConsumo(mesa))">
+                                        + Consumo
+                                    </MudButton>
+
+                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                                        <MudMenuItem Icon="@Icons.Material.Filled.SwapHoriz" OnClick="@(() => AbrirModalCambiarMesa(mesa))">
+                                            Cambiar Mesa
+                                        </MudMenuItem>
+                                    </MudMenu>
+                                </div>
+
+                                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" FullWidth="true" Class="btn-touch mt-1" StartIcon="@Icons.Material.Filled.ReceiptLong" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" OnClick="@(() => AbrirModalCobro(mesa))">
+                                    Cobrar Cuenta (Bs. @mesa.MontoTotalCalculado.ToString("N2"))
+                                </MudButton>
+                            }
+                        </div>
+                    </div>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</div>
+
+@code {
+    private List<MesaModel> _mesas = new();
+    private List<TarifaModel> _tarifas = new();
+    private List<ProductoModel> _productos = new();
+    private string _filtroEstado = "todas";
+    private bool _cargando = true;
+    private System.Threading.Timer? _timerTick;
+
+    private IEnumerable<MesaModel> MesasFiltradas =>
+        _filtroEstado == "todas"
+            ? _mesas
+            : _mesas.Where(m => m.Estado == _filtroEstado);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatosBaseAsync();
+
+        // Escuchar cambios de Supabase Realtime
+        Supabase.OnMesasUpdated += async () =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await CargarMesasAsync();
+                StateHasChanged();
+            });
+        };
+
+        // Tick local para actualizar cronómetros cada segundo sin saturar la red
+        _timerTick = new System.Threading.Timer(_ =>
+        {
+            foreach (var mesa in _mesas.Where(m => m.Estado == "ocupada" || m.Estado == "pausada"))
+            {
+                Supabase.CalcularTiempoYMontoMesa(mesa);
+            }
+            InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+    }
+
+    private async Task CargarDatosBaseAsync()
+    {
+        _cargando = true;
+        _tarifas = await Supabase.GetTarifasAsync();
+        _productos = await Supabase.GetProductosAsync();
+        await CargarMesasAsync();
+        _cargando = false;
+    }
+
+    private async Task CargarMesasAsync()
+    {
+        _mesas = await Supabase.GetMesasAsync();
+    }
+
+    private async Task AbrirModalIniciar(MesaModel mesa, string? clienteNombre = null)
+    {
+        var parameters = new DialogParameters<ModalIniciarSesion>
+        {
+            { x => x.Mesa, mesa },
+            { x => x.Tarifas, _tarifas },
+            { x => x.ClienteNombreInicial, clienteNombre }
+        };
+
+        var dialog = await DialogService.ShowAsync<ModalIniciarSesion>("Iniciar Mesa", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarMesasAsync();
+        }
+    }
+
+    private async Task LiberarReserva(MesaModel mesa)
+    {
+        if (mesa.ReservaActiva == null) return;
+        var conf = await DialogService.ShowMessageBoxAsync(
+            "Liberar Reserva",
+            $"¿Deseas cancelar la reserva de '{mesa.ReservaActiva.ClienteNombre}' y liberar la Mesa {mesa.Numero} inmediatamente?",
+            yesText: "Sí, Liberar",
+            cancelText: "Volver"
+        );
+        if (conf == true)
+        {
+            var exito = await Supabase.CancelarReservaMesaAsync(mesa.ReservaActiva.Id);
+            if (exito)
+            {
+                Snackbar.Add($"Mesa {mesa.Numero} liberada exitosamente", Severity.Success);
+                await CargarMesasAsync();
+            }
+            else
+            {
+                Snackbar.Add("Error al liberar la reserva", Severity.Error);
+            }
+        }
+    }
+
+    private async Task PausarSesion(MesaModel mesa)
+    {
+        if (mesa.SesionActiva == null) return;
+        var exito = await Supabase.PausarSesionMesaAsync(mesa.SesionActiva.Id);
+        if (exito)
+        {
+            Snackbar.Add($"Mesa {mesa.Numero} pausada", Severity.Warning);
+            await CargarMesasAsync();
+        }
+    }
+
+    private async Task ReanudarSesion(MesaModel mesa)
+    {
+        if (mesa.SesionActiva == null) return;
+        var exito = await Supabase.ReanudarSesionMesaAsync(mesa.SesionActiva.Id);
+        if (exito)
+        {
+            Snackbar.Add($"Mesa {mesa.Numero} reanudada", Severity.Success);
+            await CargarMesasAsync();
+        }
+    }
+
+    private async Task AbrirModalConsumo(MesaModel mesa)
+    {
+        var parameters = new DialogParameters<ModalAgregarConsumo>
+        {
+            { x => x.Mesa, mesa },
+            { x => x.Productos, _productos }
+        };
+
+        var dialog = await DialogService.ShowAsync<ModalAgregarConsumo>("Cargar Consumo", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarMesasAsync();
+        }
+    }
+
+    private async Task AbrirModalCobro(MesaModel mesa)
+    {
+        var parameters = new DialogParameters<ModalCobroMesa>
+        {
+            { x => x.Mesa, mesa }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalCobroMesa>("Cobro de Cuenta", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarMesasAsync();
+        }
+    }
+
+    private async Task AbrirModalCambiarMesa(MesaModel mesa)
+    {
+        var disponibles = _mesas.Where(m => m.Estado == "disponible").ToList();
+        if (!disponibles.Any())
+        {
+            Snackbar.Add("No hay otras mesas disponibles para realizar el cambio", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters<ModalCambiarMesa>
+        {
+            { x => x.MesaOrigen, mesa },
+            { x => x.MesasDisponibles, disponibles }
+        };
+
+        var dialog = await DialogService.ShowAsync<ModalCambiarMesa>("Cambiar Mesa", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarMesasAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        _timerTick?.Dispose();
+    }
+}

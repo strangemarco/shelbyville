@@ -1,0 +1,130 @@
+/* ==============================================================================
+   SHELBYVILLE BILLIARD MANAGEMENT SYSTEM
+   Design System & Luxury Dark Theme
+   ============================================================================== */
+
+:root {
+    --bg-main: #0B1210;
+    --bg-sidebar: #101B16;
+    --bg-surface: #1C2923;
+    --bg-elevated: #26372E;
+    
+    --color-primary: #164F3B;
+    --color-emerald: #238B65;
+    --color-gold: #D4AF37;
+    --color-gold-hover: #E5C158;
+    
+    --text-primary: #F5F6F2;
+    --text-secondary: #AAB8AE;
+    --text-muted: #6B7280;
+    --border-color: #34443C;
+    
+    /* Estados de mesas y operaciones */
+    --status-disponible: #22C55E;
+    --status-ocupada: #EF4444;
+    --status-pausada: #F59E0B;
+    --status-reservada: #38BDF8;
+    --status-mantenimiento: #6B7280;
+
+    --font-heading: 'Outfit', sans-serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+    background-color: var(--bg-main) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-body);
+    margin: 0;
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4, .font-heading {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+}
+
+/* Numeros tabulares para cronometros y precios */
+.tabular-nums, .price-display, .timer-display {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+}
+
+/* Scrollbar estilizada */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-sidebar);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gold);
+}
+
+/* Tarjetas y superficies elegantes */
+.shelby-card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shelby-card:hover {
+    border-color: rgba(212, 175, 55, 0.4);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
+}
+
+/* Resaltado dorado */
+.text-gold {
+    color: var(--color-gold) !important;
+}
+
+.border-gold {
+    border-color: var(--color-gold) !important;
+}
+
+.bg-gold {
+    background-color: var(--color-gold) !important;
+    color: #0B1210 !important;
+}
+
+/* Insignias de Estado */
+.badge-disponible {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: var(--status-disponible);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-ocupada {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: var(--status-ocupada);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-pausada {
+    background-color: rgba(245, 158, 11, 0.15);
+    color: var(--status-pausada);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Animacion de pulso para mesa en juego */
+@keyframes glow-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.pulse-ocupada {
+    animation: glow-pulse 2s infinite;
+}
+
+/* Botones y acciones con area tactil comoda (44px+) */
+.btn-touch {
+    min-height: 44px;
+    min-width: 44px;
+    font-weight: 600;
+}

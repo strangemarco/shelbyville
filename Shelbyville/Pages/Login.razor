@@ -1,0 +1,148 @@
+@page "/login"
+@layout EmptyLayout
+@inject SupabaseService Supabase
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<div class="d-flex align-center justify-center" style="min-height: 100vh; padding: 20px;">
+    <div class="shelby-card pa-8 d-flex flex-column gap-4" 
+         style="max-width: 440px; width: 100%; background: rgba(16, 27, 22, 0.9); border: 1.5px solid rgba(212, 175, 55, 0.4); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px);">
+        
+        <!-- Logo y Encabezado del Club -->
+        <div class="d-flex flex-column align-center text-center">
+            <img src="images/LogoShelbyville.png" alt="Shelbyville Billar" style="max-width: 220px; width: 100%; height: auto; object-fit: contain; filter: drop-shadow(0 8px 24px rgba(0,0,0,0.85));" class="mb-1" />
+            <div style="font-size: 12px; color: var(--color-gold); letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-top: 4px;">
+                Club & Lounge
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 6px;">
+                Ingresa con tu correo y contraseña asignada
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_mensajeError))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Class="rounded-lg">
+                @_mensajeError
+            </MudAlert>
+        }
+
+        <!-- Formulario de Acceso -->
+        <EditForm Model="@this" OnValidSubmit="IniciarSesionAsync">
+            <div class="d-flex flex-column gap-4 mt-2">
+                <MudTextField @bind-Value="_email" 
+                              Label="Correo Electrónico" 
+                              Placeholder="usuario@shelbyville.com" 
+                              Required="true" 
+                              Variant="Variant.Outlined" 
+                              InputType="InputType.Email" 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Email" 
+                              Immediate="true"
+                              Disabled="_procesando" />
+
+                <MudTextField @bind-Value="_password" 
+                              Label="Contraseña" 
+                              Placeholder="••••••••" 
+                              Required="true" 
+                              Variant="Variant.Outlined" 
+                              InputType="@(_mostrarPassword ? InputType.Text : InputType.Password)" 
+                              Adornment="Adornment.End" 
+                              AdornmentIcon="@(_mostrarPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)" 
+                              OnAdornmentClick="@(() => _mostrarPassword = !_mostrarPassword)" 
+                              Disabled="_procesando" />
+
+                <MudButton ButtonType="ButtonType.Submit" 
+                           Variant="Variant.Filled" 
+                           Color="Color.Tertiary" 
+                           FullWidth="true" 
+                           Class="btn-touch py-3 mt-2" 
+                           Style="background: var(--color-gold); color: #0B1210; font-weight: 800; font-size: 15px; letter-spacing: 0.5px;" 
+                           Disabled="_procesando">
+                    @if (_procesando)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Autenticando...</span>
+                    }
+                    else
+                    {
+                        <span>Ingresar al Sistema</span>
+                    }
+                </MudButton>
+            </div>
+        </EditForm>
+
+        <!-- Modo Terminal / Acceso Rápido de Barra -->
+        <div class="d-flex flex-column align-center gap-2 pt-3" style="border-top: 1px solid var(--border-color);">
+            <div style="font-size: 12px; color: var(--text-muted);">
+                ¿Operando en terminal de barra o mostrador?
+            </div>
+            <MudButton Variant="Variant.Text" 
+                       Color="Color.Tertiary" 
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Storefront" 
+                       OnClick="@(() => Navigation.NavigateTo("/"))">
+                Continuar a Salón en Modo Terminal
+            </MudButton>
+        </div>
+
+        <div style="font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 4px;">
+            Sistema de Gestión Integral de Mesas, Barra y Caja v1.0
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private bool _mostrarPassword;
+    private bool _procesando;
+    private string? _mensajeError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Supabase.RestaurarSesionAsync();
+        // Si ya hay sesión activa, ir al dashboard
+        var perfil = await Supabase.GetPerfilUsuarioAsync();
+        if (perfil != null && perfil.Activo)
+        {
+            Navigation.NavigateTo(string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl);
+        }
+    }
+
+    private async Task IniciarSesionAsync()
+    {
+        _mensajeError = null;
+
+        if (string.IsNullOrWhiteSpace(_email) || !_email.Contains('@'))
+        {
+            _mensajeError = "Por favor, ingresa un correo electrónico válido.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_password))
+        {
+            _mensajeError = "Por favor, ingresa tu contraseña.";
+            return;
+        }
+
+        _procesando = true;
+        var (exito, error, perfil) = await Supabase.IniciarSesionAsync(_email, _password);
+        _procesando = false;
+
+        if (exito)
+        {
+            var nombre = perfil?.NombreCompleto ?? "Usuario";
+            var rol = (perfil?.RolId ?? "Operador").ToUpperInvariant();
+            Snackbar.Add($"¡Bienvenido {nombre}! (Rol: {rol})", Severity.Success);
+
+            Navigation.NavigateTo(string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl);
+        }
+        else
+        {
+            _mensajeError = error ?? "Error al autenticar con el servidor.";
+        }
+    }
+}

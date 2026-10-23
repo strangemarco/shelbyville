@@ -1,0 +1,863 @@
+@page "/configuracion"
+@inject SupabaseService Supabase
+@inject IConfiguration Config
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<div class="d-flex flex-column gap-5">
+    <!-- Header Principal -->
+    <div class="d-flex flex-column flex-md-row justify-space-between align-start align-md-center gap-4">
+        <div>
+            <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold); letter-spacing: 0.5px;">
+                CONFIGURACIÓN DEL SISTEMA
+            </h1>
+            <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
+                Gestión interactiva de mesas, tarifas por hora, reservas con auto-liberación y conexión con Supabase.
+            </p>
+        </div>
+
+        <!-- Botones de Acción Rápida -->
+        <div class="d-flex flex-wrap gap-2">
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Class="btn-touch" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" OnClick="AbrirModalNuevaMesa">
+                Nueva Mesa
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.PriceChange" Class="btn-touch" OnClick="AbrirModalNuevaTarifa">
+                Nueva Tarifa
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.BookOnline" Class="btn-touch" Style="background: #0284C7; color: #FFF; font-weight: 700;" OnClick="AbrirModalNuevaReserva">
+                Reservar Mesa
+            </MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarTodoAsync" />
+        </div>
+    </div>
+
+    <!-- Métricas Resumen -->
+    <MudGrid Spacing="2">
+        <MudItem xs="6" sm="3">
+            <div class="pa-3 shelby-card d-flex align-center gap-3" style="background: var(--bg-surface);">
+                <MudAvatar Color="Color.Tertiary" Variant="Variant.Filled" Rounded="true">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsScore" />
+                </MudAvatar>
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Total Mesas</div>
+                    <div class="font-heading tabular-nums" style="font-size: 20px; font-weight: 800; color: var(--color-gold);">
+                        @_mesas.Count
+                    </div>
+                </div>
+            </div>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <div class="pa-3 shelby-card d-flex align-center gap-3" style="background: var(--bg-surface);">
+                <MudAvatar Color="Color.Success" Variant="Variant.Filled" Rounded="true">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                </MudAvatar>
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Mesas en Servicio</div>
+                    <div class="font-heading tabular-nums" style="font-size: 20px; font-weight: 800; color: var(--status-disponible);">
+                        @_mesas.Count(m => m.Activa)
+                    </div>
+                </div>
+            </div>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <div class="pa-3 shelby-card d-flex align-center gap-3" style="background: var(--bg-surface);">
+                <MudAvatar Color="Color.Warning" Variant="Variant.Filled" Rounded="true">
+                    <MudIcon Icon="@Icons.Material.Filled.PriceCheck" />
+                </MudAvatar>
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Tarifas Activas</div>
+                    <div class="font-heading tabular-nums" style="font-size: 20px; font-weight: 800; color: var(--text-primary);">
+                        @_tarifas.Count(t => t.Activo)
+                    </div>
+                </div>
+            </div>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <div class="pa-3 shelby-card d-flex align-center gap-3" style="background: var(--bg-surface);">
+                <MudAvatar Color="Color.Info" Variant="Variant.Filled" Rounded="true">
+                    <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" />
+                </MudAvatar>
+                <div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Reservas Activas</div>
+                    <div class="font-heading tabular-nums" style="font-size: 20px; font-weight: 800; color: #38BDF8;">
+                        @_reservas.Count(r => r.Estado == "activa")
+                    </div>
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-center align-center py-12">
+            <MudProgressCircular Color="Color.Tertiary" Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- Pestañas de Configuración -->
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pt-4" Color="Color.Dark" SliderColor="Color.Tertiary">
+            
+            <!-- PESTAÑA 1: GESTIÓN DE MESAS -->
+            <MudTabPanel Text="Mesas de Billar" Icon="@Icons.Material.Filled.SportsScore">
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3">
+                        <div class="d-flex gap-2 align-center flex-wrap">
+                            <MudButton Variant="@(_filtroMesas == "todas" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => _filtroMesas = "todas")">
+                                Todas (@_mesas.Count)
+                            </MudButton>
+                            <MudButton Variant="@(_filtroMesas == "activas" ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Size="Size.Small" OnClick="@(() => _filtroMesas = "activas")">
+                                En Servicio (@_mesas.Count(m => m.Activa))
+                            </MudButton>
+                            <MudButton Variant="@(_filtroMesas == "bajas" ? Variant.Filled : Variant.Outlined)" Color="Color.Error" Size="Size.Small" OnClick="@(() => _filtroMesas = "bajas")">
+                                Dadas de Baja (@_mesas.Count(m => !m.Activa))
+                            </MudButton>
+                        </div>
+                        <MudTextField @bind-Value="_busquedaMesa" Placeholder="Buscar mesa o tipo..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 250px;" />
+                    </div>
+
+                    <div class="shelby-card" style="background: var(--bg-surface); overflow: hidden; border: 1px solid var(--border-color);">
+                        <MudTable Items="MesasFiltradas" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Mesa</MudTh>
+                                <MudTh>Nombre</MudTh>
+                                <MudTh>Tipo</MudTh>
+                                <MudTh>Tarifa por Defecto</MudTh>
+                                <MudTh>Estado Operativo</MudTh>
+                                <MudTh>Servicio</MudTh>
+                                <MudTh Style="text-align: right;">Acciones</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Mesa">
+                                    <div class="d-flex align-center gap-2">
+                                        <div class="font-heading" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-elevated); border: 2px solid var(--color-gold); display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--color-gold);">
+                                            @context.Numero
+                                        </div>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Nombre">
+                                    <div style="font-weight: 600; color: var(--text-primary);">@context.Nombre</div>
+                                    @if (context.ReservaActiva != null)
+                                    {
+                                        <div style="font-size: 11px; color: #38BDF8;">
+                                            📅 Reservada para: @context.ReservaActiva.ClienteNombre (@context.ReservaActiva.HoraInicio - @context.ReservaActiva.HoraFin)
+                                        </div>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Tipo">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="border-color: var(--border-color); font-size: 11px;">
+                                        @context.Tipo
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Tarifa">
+                                    <span class="text-gold font-heading" style="font-weight: 700;">
+                                        Bs. @(context.Tarifa?.PrecioPorHora.ToString("N2") ?? "25.00")/hr
+                                    </span>
+                                </MudTd>
+                                <MudTd DataLabel="Estado Operativo">
+                                    @if (context.Estado == "disponible")
+                                    {
+                                        <span class="badge-disponible px-2 py-1" style="border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                            Disponible
+                                        </span>
+                                    }
+                                    else if (context.Estado == "ocupada")
+                                    {
+                                        <span class="badge-ocupada px-2 py-1" style="border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                            En Juego
+                                        </span>
+                                    }
+                                    else if (context.Estado == "pausada")
+                                    {
+                                        <span class="badge-pausada px-2 py-1" style="border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                            Pausada
+                                        </span>
+                                    }
+                                    else if (context.Estado == "reservada")
+                                    {
+                                        <span class="px-2 py-1" style="background: rgba(56, 189, 248, 0.2); color: #38BDF8; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                            Reservada
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="px-2 py-1" style="background: rgba(107, 114, 128, 0.2); color: #9CA3AF; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                            Mantenimiento
+                                        </span>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Servicio">
+                                    <MudSwitch T="bool" Value="@context.Activa" ValueChanged="@((bool val) => AlternarBajaMesa(context, val))" Color="Color.Success">
+                                        <span style="font-size: 12px; font-weight: 600; color: @(context.Activa ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                                            @(context.Activa ? "Habilitada" : "Dada de Baja")
+                                        </span>
+                                    </MudSwitch>
+                                </MudTd>
+                                <MudTd DataLabel="Acciones" Style="text-align: right;">
+                                    <div class="d-flex justify-end gap-1">
+                                        <MudTooltip Text="Editar Mesa">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Tertiary" OnClick="@(() => AbrirModalEditarMesa(context))" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="Reservar esta Mesa">
+                                            <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small" Color="Color.Info" OnClick="@(() => AbrirModalReservaParaMesa(context))" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="@(context.Estado == "mantenimiento" ? "Quitar Mantenimiento" : "Poner en Mantenimiento")">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Build" Size="Size.Small" Color="@(context.Estado == "mantenimiento" ? Color.Warning : Color.Default)" OnClick="@(() => AlternarMantenimiento(context))" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="Eliminar Mesa">
+                                            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmarEliminarMesa(context))" />
+                                        </MudTooltip>
+                                    </div>
+                                </MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager PageSizeOptions="new int[] { 5, 10, 20 }" InfoFormat="{first_item}-{last_item} de {all_items}" RowsPerPageString="Mesas por página:" />
+                            </PagerContent>
+                        </MudTable>
+                    </div>
+                </div>
+            </MudTabPanel>
+
+            <!-- PESTAÑA 2: GESTIÓN DE TARIFAS Y PRECIOS -->
+            <MudTabPanel Text="Tarifas y Precios" Icon="@Icons.Material.Filled.PriceCheck">
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex justify-space-between align-center">
+                        <div>
+                            <div style="font-weight: 700; color: var(--text-primary); font-size: 16px;">Tarifas por Hora de Billar</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Configura los precios que se cobrarán por hora, cobro mínimo y minutos de tolerancia.
+                            </div>
+                        </div>
+                        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Style="background: var(--color-gold); color: #0B1210; font-weight: 700;" OnClick="AbrirModalNuevaTarifa">
+                            Nueva Tarifa
+                        </MudButton>
+                    </div>
+
+                    <div class="shelby-card" style="background: var(--bg-surface); overflow: hidden; border: 1px solid var(--border-color);">
+                        <MudTable Items="_tarifas" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Nombre / Descripción</MudTh>
+                                <MudTh>Precio por Hora</MudTh>
+                                <MudTh>Cobro Mínimo</MudTh>
+                                <MudTh>Tolerancia de Gracia</MudTh>
+                                <MudTh>Estado</MudTh>
+                                <MudTh Style="text-align: right;">Acciones</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Nombre">
+                                    <div style="font-weight: 700; color: var(--text-primary); font-size: 14px;">@context.Nombre</div>
+                                    <div style="font-size: 12px; color: var(--text-secondary);">@(context.Descripcion ?? "Sin descripción")</div>
+                                </MudTd>
+                                <MudTd DataLabel="Precio por Hora">
+                                    <span class="font-heading text-gold tabular-nums" style="font-size: 18px; font-weight: 800;">
+                                        Bs. @context.PrecioPorHora.ToString("N2")/hr
+                                    </span>
+                                </MudTd>
+                                <MudTd DataLabel="Cobro Mínimo">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                        @context.MinutosMinimo min
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Tolerancia">
+                                    <span style="font-size: 13px; color: var(--text-secondary);">
+                                        @context.MinutosTolerancia min
+                                    </span>
+                                </MudTd>
+                                <MudTd DataLabel="Estado">
+                                    <MudSwitch T="bool" Value="@context.Activo" ValueChanged="@((bool val) => AlternarEstadoTarifa(context, val))" Color="Color.Success">
+                                        <span style="font-size: 12px; font-weight: 600; color: @(context.Activo ? "var(--status-disponible)" : "var(--status-ocupada)");">
+                                            @(context.Activo ? "Activa" : "Inactiva")
+                                        </span>
+                                    </MudSwitch>
+                                </MudTd>
+                                <MudTd DataLabel="Acciones" Style="text-align: right;">
+                                    <div class="d-flex justify-end gap-1">
+                                        <MudTooltip Text="Editar Tarifa">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Tertiary" OnClick="@(() => AbrirModalEditarTarifa(context))" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="Eliminar Tarifa">
+                                            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmarEliminarTarifa(context))" />
+                                        </MudTooltip>
+                                    </div>
+                                </MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager PageSizeOptions="new int[] { 5, 10, 20 }" InfoFormat="{first_item}-{last_item} de {all_items}" RowsPerPageString="Tarifas por página:" />
+                            </PagerContent>
+                        </MudTable>
+                    </div>
+                </div>
+            </MudTabPanel>
+
+            <!-- PESTAÑA 3: RESERVAS Y AUTO-LIBERACIÓN -->
+            <MudTabPanel Text="Reservas y Horarios" Icon="@Icons.Material.Filled.BookOnline">
+                <div class="d-flex flex-column gap-3">
+                    
+                    <!-- Banner explicativo de la auto-expiración -->
+                    <div class="pa-4 d-flex align-center gap-3" style="background: rgba(56, 189, 248, 0.08); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.25);">
+                        <MudIcon Icon="@Icons.Material.Filled.Timelapse" Color="Color.Info" Size="Size.Large" />
+                        <div class="flex-grow-1">
+                            <div style="font-weight: 700; color: #38BDF8; font-size: 14px;">
+                                Auto-Liberación de Mesas por Inasistencia o Expiración
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                                Al reservar una mesa, esta queda apartada. Si el cliente no llega transcurrido el tiempo de tolerancia (por defecto 15 minutos) tras la hora acordada, o si se sobrepasa la hora reservada, el sistema marca la reserva como <b>Expirada</b> y la mesa pasa inmediatamente a <b>Disponible</b>.
+                            </div>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" StartIcon="@Icons.Material.Filled.Sync" OnClick="VerificarExpiradasManualmente">
+                            Chequear Expiradas
+                        </MudButton>
+                    </div>
+
+                    <!-- Filtros y Barra de Acciones de Reservas -->
+                    <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3">
+                        <div class="d-flex gap-2 align-center flex-wrap">
+                            <MudButton Variant="@(_filtroReservas == "todas" ? Variant.Filled : Variant.Outlined)" Color="Color.Tertiary" Size="Size.Small" OnClick="@(() => _filtroReservas = "todas")">
+                                Todas (@_reservas.Count)
+                            </MudButton>
+                            <MudButton Variant="@(_filtroReservas == "activa" ? Variant.Filled : Variant.Outlined)" Color="Color.Info" Size="Size.Small" OnClick="@(() => _filtroReservas = "activa")">
+                                Activas (@_reservas.Count(r => r.Estado == "activa"))
+                            </MudButton>
+                            <MudButton Variant="@(_filtroReservas == "completada" ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Size="Size.Small" OnClick="@(() => _filtroReservas = "completada")">
+                                Atendidas
+                            </MudButton>
+                            <MudButton Variant="@(_filtroReservas == "expirada" ? Variant.Filled : Variant.Outlined)" Color="Color.Warning" Size="Size.Small" OnClick="@(() => _filtroReservas = "expirada")">
+                                Expiradas
+                            </MudButton>
+                            <MudButton Variant="@(_filtroReservas == "cancelada" ? Variant.Filled : Variant.Outlined)" Color="Color.Error" Size="Size.Small" OnClick="@(() => _filtroReservas = "cancelada")">
+                                Canceladas
+                            </MudButton>
+                        </div>
+
+                        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Style="background: #0284C7; color: #FFF; font-weight: 700;" OnClick="AbrirModalNuevaReserva">
+                            + Nueva Reserva
+                        </MudButton>
+                    </div>
+
+                    <!-- Tabla de Reservas -->
+                    <div class="shelby-card" style="background: var(--bg-surface); overflow: hidden; border: 1px solid var(--border-color);">
+                        <MudTable Items="ReservasFiltradas" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Mesa</MudTh>
+                                <MudTh>Cliente</MudTh>
+                                <MudTh>Fecha</MudTh>
+                                <MudTh>Rango de Hora</MudTh>
+                                <MudTh>Tolerancia</MudTh>
+                                <MudTh>Estado</MudTh>
+                                <MudTh Style="text-align: right;">Acciones</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Mesa">
+                                    <div class="d-flex align-center gap-2">
+                                        <span class="font-heading text-gold" style="font-weight: 800; font-size: 15px;">
+                                            Mesa @(context.Mesa?.Numero ?? 0)
+                                        </span>
+                                        <span style="font-size: 11px; color: var(--text-secondary);">
+                                            (@(context.Mesa?.Tipo ?? "Pool"))
+                                        </span>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Cliente">
+                                    <div style="font-weight: 600; color: var(--text-primary);">@context.ClienteNombre</div>
+                                    @if (!string.IsNullOrWhiteSpace(context.Telefono))
+                                    {
+                                        <div style="font-size: 11px; color: var(--text-secondary);">
+                                            📞 @context.Telefono
+                                        </div>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Fecha">
+                                    <span style="font-size: 13px;">@context.Fecha.ToString("dd/MM/yyyy")</span>
+                                </MudTd>
+                                <MudTd DataLabel="Horario">
+                                    <span class="font-heading tabular-nums" style="font-weight: 700; color: #38BDF8;">
+                                        @context.HoraInicio — @context.HoraFin
+                                    </span>
+                                </MudTd>
+                                <MudTd DataLabel="Tolerancia">
+                                    <span style="font-size: 12px; color: var(--text-secondary);">
+                                        +@context.MinutosToleranciaLlegada min espera
+                                    </span>
+                                </MudTd>
+                                <MudTd DataLabel="Estado">
+                                    @if (context.Estado == "activa")
+                                    {
+                                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">
+                                            Activa (Reservada)
+                                        </MudChip>
+                                    }
+                                    else if (context.Estado == "completada")
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">
+                                            Completada
+                                        </MudChip>
+                                    }
+                                    else if (context.Estado == "expirada")
+                                    {
+                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                            Expirada (No vino)
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled">
+                                            Cancelada
+                                        </MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Acciones" Style="text-align: right;">
+                                    <div class="d-flex justify-end gap-1">
+                                        @if (context.Estado == "activa")
+                                        {
+                                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => IniciarJuegoDesdeReserva(context))">
+                                                Iniciar Juego
+                                            </MudButton>
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => CancelarReserva(context))">
+                                                Liberar Mesa
+                                            </MudButton>
+                                        }
+                                        else
+                                        {
+                                            <span style="font-size: 11px; color: var(--text-secondary);">-</span>
+                                        }
+                                    </div>
+                                </MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager PageSizeOptions="new int[] { 5, 10, 20 }" InfoFormat="{first_item}-{last_item} de {all_items}" RowsPerPageString="Reservas por página:" />
+                            </PagerContent>
+                        </MudTable>
+                    </div>
+                </div>
+            </MudTabPanel>
+
+            <!-- PESTAÑA 4: SERVIDOR SUPABASE -->
+            <MudTabPanel Text="Servidor y Base de Datos" Icon="@Icons.Material.Filled.CloudDone">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="6">
+                        <div class="shelby-card pa-5 d-flex flex-column gap-3" style="background: var(--bg-surface); border: 1px solid var(--border-color);">
+                            <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
+                                <MudIcon Icon="@Icons.Material.Filled.CloudDone" Color="Color.Success" />
+                                <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                                    Estado de Conexión
+                                </span>
+                            </div>
+
+                            <div class="d-flex flex-column gap-2" style="font-size: 13px;">
+                                <div class="d-flex justify-space-between">
+                                    <span style="color: var(--text-secondary);">Enlace Supabase:</span>
+                                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Conectado y Operativo</MudChip>
+                                </div>
+                                <div class="d-flex justify-space-between">
+                                    <span style="color: var(--text-secondary);">URL del Proyecto:</span>
+                                    <span style="font-family: monospace; color: var(--color-gold);">@(Config["Supabase:Url"])</span>
+                                </div>
+                                <div class="d-flex justify-space-between">
+                                    <span style="color: var(--text-secondary);">Motor de Base de Datos:</span>
+                                    <span style="font-weight: 600;">PostgreSQL + Realtime</span>
+                                </div>
+                                <div class="d-flex justify-space-between">
+                                    <span style="color: var(--text-secondary);">Lógica Transaccional:</span>
+                                    <span style="font-weight: 600;">PostgreSQL RPC / Functions</span>
+                                </div>
+                            </div>
+                        </div>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <div class="shelby-card pa-5 d-flex flex-column gap-3" style="background: var(--bg-surface); border: 1px solid var(--border-color);">
+                            <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
+                                <MudIcon Icon="@Icons.Material.Filled.Terminal" Color="Color.Tertiary" />
+                                <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                                    Script de Base de Datos (Módulo de Mesas y Reservas)
+                                </span>
+                            </div>
+
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Para activar la tabla de reservas en Supabase y los procedimientos almacenados correspondientes, se ha generado el script:
+                            </div>
+
+                            <div class="pa-2 font-mono" style="background: var(--bg-elevated); border-radius: 6px; font-size: 12px; color: var(--color-gold);">
+                                database/09_modulo_gestion_mesas_tarifas_reservas.sql
+                            </div>
+
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                ✓ Permite estado <code>'reservada'</code> en <code>mesas</code><br />
+                                ✓ Crea la tabla <code>reservas_mesa</code> con RLS y Realtime<br />
+                                ✓ Funciones RPC: <code>crear_reserva_mesa</code>, <code>verificar_y_liberar_reservas_expiradas</code>
+                            </div>
+                        </div>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <div class="shelby-card pa-5 d-flex flex-column gap-3" style="background: var(--bg-surface); border: 1px solid var(--border-color);">
+                            <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
+                                <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Tertiary" />
+                                <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                                    Script de Base de Datos (Módulo de Personal, Usuarios y Roles)
+                                </span>
+                            </div>
+
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Para activar la creación administrativa de empleados, sincronización de correo y reseteo de contraseñas:
+                            </div>
+
+                            <div class="pa-2 font-mono" style="background: var(--bg-elevated); border-radius: 6px; font-size: 12px; color: var(--color-gold);">
+                                database/10_modulo_usuarios_y_roles.sql
+                            </div>
+
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                ✓ Catálogo completo de roles (Administrador, Supervisor, Cajero, Mesero, Bartender)<br />
+                                ✓ Columna <code>email</code> y sincronización bidireccional en <code>perfiles</code><br />
+                                ✓ Funciones RPC administrativas: <code>admin_crear_usuario</code>, <code>admin_actualizar_perfil</code>, <code>admin_cambiar_password</code>, <code>admin_alternar_activo</code>
+                            </div>
+                        </div>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+        </MudTabs>
+    }
+</div>
+
+@code {
+    private List<MesaModel> _mesas = new();
+    private List<TarifaModel> _tarifas = new();
+    private List<ReservaMesaModel> _reservas = new();
+    private bool _cargando = true;
+
+    private string _filtroMesas = "todas";
+    private string _busquedaMesa = string.Empty;
+    private string _filtroReservas = "todas";
+
+    private List<MesaModel> MesasFiltradas
+    {
+        get
+        {
+            var query = _mesas.AsEnumerable();
+
+            if (_filtroMesas == "activas")
+                query = query.Where(m => m.Activa);
+            else if (_filtroMesas == "bajas")
+                query = query.Where(m => !m.Activa);
+
+            if (!string.IsNullOrWhiteSpace(_busquedaMesa))
+            {
+                var q = _busquedaMesa.Trim();
+                query = query.Where(m =>
+                    m.Numero.ToString().Contains(q) ||
+                    (!string.IsNullOrEmpty(m.Nombre) && m.Nombre.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrEmpty(m.Tipo) && m.Tipo.Contains(q, StringComparison.OrdinalIgnoreCase))
+                );
+            }
+
+            return query.OrderBy(m => m.Numero).ToList();
+        }
+    }
+
+    private List<ReservaMesaModel> ReservasFiltradas
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_filtroReservas) || _filtroReservas == "todas")
+                return _reservas;
+            return _reservas.Where(r => r.Estado == _filtroReservas).ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarTodoAsync();
+
+        Supabase.OnMesasUpdated += async () =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await CargarTodoAsync();
+                StateHasChanged();
+            });
+        };
+    }
+
+    public void Dispose()
+    {
+        // Limpieza de suscripciones
+    }
+
+    private async Task CargarTodoAsync()
+    {
+        _cargando = true;
+        try
+        {
+            // Chequear reservas expiradas proactivamente al entrar o refrescar
+            await Supabase.VerificarYExpirarReservasAsync();
+
+            _mesas = await Supabase.GetMesasAsync(soloActivas: false);
+            _tarifas = await Supabase.GetTarifasAsync(soloActivas: false);
+            _reservas = await Supabase.GetReservasAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error cargando datos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    // =========================================================================
+    // ACCIONES DE MESAS
+    // =========================================================================
+    private async Task AbrirModalNuevaMesa()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Tarifas"] = _tarifas
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalMesa>("Nueva Mesa", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task AbrirModalEditarMesa(MesaModel mesa)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Mesa"] = mesa,
+            ["Tarifas"] = _tarifas
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalMesa>($"Editar Mesa {mesa.Numero}", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task AlternarBajaMesa(MesaModel mesa, bool activa)
+    {
+        mesa.Activa = activa;
+        var exito = await Supabase.DarDeBajaMesaAsync(mesa.Id, activa);
+        if (exito)
+        {
+            Snackbar.Add(activa ? $"Mesa {mesa.Numero} dada de alta" : $"Mesa {mesa.Numero} dada de baja", Severity.Info);
+        }
+        else
+        {
+            Snackbar.Add("Error al actualizar estado de la mesa", Severity.Error);
+        }
+    }
+
+    private async Task AlternarMantenimiento(MesaModel mesa)
+    {
+        if (mesa.Estado == "ocupada")
+        {
+            Snackbar.Add("No puedes poner en mantenimiento una mesa en juego", Severity.Warning);
+            return;
+        }
+
+        var nuevoEstado = mesa.Estado == "mantenimiento" ? "disponible" : "mantenimiento";
+        var exito = await Supabase.CambiarEstadoMesaAsync(mesa.Id, nuevoEstado);
+        if (exito)
+        {
+            Snackbar.Add(nuevoEstado == "mantenimiento" ? $"Mesa {mesa.Numero} en mantenimiento" : $"Mesa {mesa.Numero} disponible", Severity.Info);
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task ConfirmarEliminarMesa(MesaModel mesa)
+    {
+        if (mesa.Estado == "ocupada")
+        {
+            Snackbar.Add("No puedes eliminar una mesa con juego activo", Severity.Warning);
+            return;
+        }
+
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Eliminar Mesa",
+            $"¿Estás seguro de eliminar permanentemente la Mesa {mesa.Numero} ({mesa.Nombre})? Si prefieres mantener su historial, puedes simplemente Darla de Baja.",
+            yesText: "Sí, Eliminar",
+            cancelText: "Cancelar"
+        );
+
+        if (confirmado == true)
+        {
+            var exito = await Supabase.EliminarMesaAsync(mesa.Id);
+            if (exito)
+            {
+                Snackbar.Add($"Mesa {mesa.Numero} eliminada", Severity.Success);
+                await CargarTodoAsync();
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar la mesa (puede tener sesiones asociadas; se recomienda darla de baja)", Severity.Error);
+            }
+        }
+    }
+
+    // =========================================================================
+    // ACCIONES DE TARIFAS
+    // =========================================================================
+    private async Task AbrirModalNuevaTarifa()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalTarifa>("Nueva Tarifa", options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task AbrirModalEditarTarifa(TarifaModel tarifa)
+    {
+        var parameters = new DialogParameters { ["Tarifa"] = tarifa };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalTarifa>($"Editar {tarifa.Nombre}", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task AlternarEstadoTarifa(TarifaModel tarifa, bool activo)
+    {
+        tarifa.Activo = activo;
+        var exito = await Supabase.GuardarTarifaAsync(tarifa);
+        if (exito)
+        {
+            Snackbar.Add(activo ? $"Tarifa '{tarifa.Nombre}' activada" : $"Tarifa '{tarifa.Nombre}' desactivada", Severity.Info);
+        }
+        else
+        {
+            Snackbar.Add("Error al actualizar tarifa", Severity.Error);
+        }
+    }
+
+    private async Task ConfirmarEliminarTarifa(TarifaModel tarifa)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Eliminar Tarifa",
+            $"¿Deseas eliminar la tarifa '{tarifa.Nombre}'?",
+            yesText: "Sí, Eliminar",
+            cancelText: "Cancelar"
+        );
+
+        if (confirmado == true)
+        {
+            var exito = await Supabase.EliminarTarifaAsync(tarifa.Id);
+            if (exito)
+            {
+                Snackbar.Add("Tarifa eliminada", Severity.Success);
+                await CargarTodoAsync();
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar la tarifa", Severity.Error);
+            }
+        }
+    }
+
+    // =========================================================================
+    // ACCIONES DE RESERVAS
+    // =========================================================================
+    private async Task AbrirModalNuevaReserva()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Mesas"] = _mesas
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalReserva>("Reservar Mesa", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task AbrirModalReservaParaMesa(MesaModel mesa)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Mesas"] = _mesas,
+            ["MesaPreseleccionada"] = mesa
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalReserva>($"Reservar Mesa {mesa.Numero}", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+
+    private async Task VerificarExpiradasManualmente()
+    {
+        var cant = await Supabase.VerificarYExpirarReservasAsync();
+        if (cant > 0)
+        {
+            Snackbar.Add($"Se liberaron {cant} mesa(s) cuya reserva había expirado", Severity.Warning);
+        }
+        else
+        {
+            Snackbar.Add("No hay reservas expiradas pendientes", Severity.Info);
+        }
+        await CargarTodoAsync();
+    }
+
+    private async Task CancelarReserva(ReservaMesaModel reserva)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Liberar Mesa Reservada",
+            $"¿Deseas cancelar la reserva de {reserva.ClienteNombre} y liberar la mesa inmediatamente?",
+            yesText: "Sí, Liberar",
+            cancelText: "Volver"
+        );
+
+        if (confirmado == true)
+        {
+            var exito = await Supabase.CancelarReservaMesaAsync(reserva.Id);
+            if (exito)
+            {
+                Snackbar.Add("Reserva cancelada y mesa liberada", Severity.Success);
+                await CargarTodoAsync();
+            }
+            else
+            {
+                Snackbar.Add("Error al cancelar la reserva", Severity.Error);
+            }
+        }
+    }
+
+    private async Task IniciarJuegoDesdeReserva(ReservaMesaModel reserva)
+    {
+        var mesa = _mesas.FirstOrDefault(m => m.Id == reserva.MesaId);
+        if (mesa == null)
+        {
+            Snackbar.Add("No se encontró la mesa de la reserva", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            ["Mesa"] = mesa,
+            ["Tarifas"] = _tarifas,
+            ["ClienteNombreInicial"] = reserva.ClienteNombre
+        };
+        var dialog = await DialogService.ShowAsync<ModalIniciarSesion>($"Iniciar Juego - Mesa {mesa.Numero}", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await CargarTodoAsync();
+        }
+    }
+}
