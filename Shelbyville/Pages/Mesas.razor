@@ -33,7 +33,6 @@
             <MudChip T="string" Variant="Variant.Filled" Color="Color.Warning" Size="Size.Medium">
                 Pausadas: <b>@_mesas.Count(m => m.Estado == "pausada")</b>
             </MudChip>
-            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarMesasAsync" AriaLabel="Actualizar mesas" />
         </div>
     </div>
 
@@ -143,10 +142,10 @@
                                         RESERVA PROGRAMADA
                                     </div>
                                     <div class="font-heading" style="font-size: 14px; color: #FFF; font-weight: 700;">
-                                        👤 @(mesa.ReservaActiva?.ClienteNombre ?? "Cliente")
+                                        <i class="fa-solid fa-user me-1" style="color: #38BDF8; font-size: 13px;"></i>@(mesa.ReservaActiva?.ClienteNombre ?? "Cliente")
                                     </div>
                                     <div style="font-size: 11px; color: rgba(255, 255, 255, 0.8); margin-top: 2px;">
-                                        🕒 @(mesa.ReservaActiva?.HoraInicio) - @(mesa.ReservaActiva?.HoraFin) (+@(mesa.ReservaActiva?.MinutosToleranciaLlegada ?? 15)m tol.)
+                                        <i class="fa-regular fa-clock me-1" style="font-size: 11px;"></i>@(mesa.ReservaActiva?.HoraInicio) - @(mesa.ReservaActiva?.HoraFin) (+@(mesa.ReservaActiva?.MinutosToleranciaLlegada ?? 15)m tol.)
                                     </div>
                                 </div>
                             }
@@ -160,12 +159,12 @@
 
                                 <div class="d-flex align-center gap-2 mt-1">
                                     <span style="font-size: 12px; color: #E5C158; font-weight: 600;">
-                                        👤 @(mesa.SesionActiva?.ClienteNombre ?? "Cliente")
+                                        <i class="fa-solid fa-user me-1" style="font-size: 12px;"></i>@(mesa.SesionActiva?.ClienteNombre ?? "Cliente")
                                     </span>
                                 </div>
 
                                 <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 2px;">
-                                    Tarifa: Bs. @(mesa.Tarifa?.PrecioPorHora.ToString("N2"))/hr
+                                    Tarifa: Bs. @(mesa.Tarifa?.PrecioPorHora.ToString("N2"))/hr @(mesa.Tarifa?.MinutosCortesia > 0 ? $"({mesa.Tarifa.MinutosCortesia}m cortesía)" : "")
                                 </div>
                             }
                         </div>
@@ -390,7 +389,8 @@
             { x => x.Productos, _productos }
         };
 
-        var dialog = await DialogService.ShowAsync<ModalAgregarConsumo>("Cargar Consumo", parameters);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ModalAgregarConsumo>("Cargar Consumo", parameters, options);
         var result = await dialog.Result;
         if (result != null && !result.Canceled)
         {

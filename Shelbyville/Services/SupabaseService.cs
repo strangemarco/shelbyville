@@ -115,6 +115,63 @@ public class SupabaseService
         }
     }
 
+    public async Task<bool> RefrescarSesionExpiradaAsync()
+    {
+        try
+        {
+            if (_client == null) return false;
+
+            // 1. Intentar llamar a RefreshSession directamente si el cliente tiene sesión
+            try
+            {
+                var refreshed = await _client.Auth.RefreshSession();
+                if (refreshed != null && !string.IsNullOrEmpty(refreshed.AccessToken))
+                {
+                    await GuardarSesionStorageAsync(refreshed.AccessToken, refreshed.RefreshToken ?? "");
+                    OnAuthStateChange?.Invoke();
+                    return true;
+                }
+            }
+            catch { }
+
+            // 2. Intentar restaurar desde localStorage con el refresh token
+            var json = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", STORAGE_KEY);
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                var data = JsonSerializer.Deserialize<SessionStorageData>(json);
+                if (data != null && !string.IsNullOrWhiteSpace(data.RefreshToken))
+                {
+                    var session = await _client.Auth.SetSession(data.AccessToken ?? "", data.RefreshToken);
+                    if (session != null && !string.IsNullOrEmpty(session.AccessToken))
+                    {
+                        try
+                        {
+                            var refreshed2 = await _client.Auth.RefreshSession();
+                            if (refreshed2 != null && !string.IsNullOrEmpty(refreshed2.AccessToken))
+                            {
+                                await GuardarSesionStorageAsync(refreshed2.AccessToken, refreshed2.RefreshToken ?? data.RefreshToken);
+                                OnAuthStateChange?.Invoke();
+                                return true;
+                            }
+                        }
+                        catch { }
+
+                        await GuardarSesionStorageAsync(session.AccessToken, session.RefreshToken ?? data.RefreshToken);
+                        OnAuthStateChange?.Invoke();
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refrescando sesión: {ex.Message}");
+            return false;
+        }
+    }
+
     public Client Client
     {
         get
@@ -131,8 +188,8 @@ public class SupabaseService
     {
         if (_initialized) return;
 
-        var url = _config["Supabase:Url"] ?? throw new InvalidOperationException("Falta Supabase:Url en appsettings.json");
-        var key = _config["Supabase:Key"] ?? throw new InvalidOperationException("Falta Supabase:Key en appsettings.json");
+        var url = _config["Supabase:Url"] ?? "https://kdvvuasxusaisqhusnwh.supabase.co";
+        var key = _config["Supabase:Key"] ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkdnZ1YXN4dXNhaXNxaHVzbndoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NTk2NjksImV4cCI6MjEwODMzNTY2OX0.Jv3Nndd36z03btQKu374m_TxbaCpdNSI1uTVZkfmAAY";
 
         var options = new SupabaseOptions
         {
@@ -523,6 +580,10 @@ public class SupabaseService
                 }
 
                 mesa.ReservaActiva = reservasActivas.FirstOrDefault(r => r.MesaId == mesa.Id);
+                if (mesa.ReservaActiva != null && mesa.Estado == "disponible")
+                {
+                    mesa.Estado = "reservada";
+                }
             }
 
             return mesas;
@@ -559,18 +620,19 @@ public class SupabaseService
         var tarifa = mesa.Tarifa;
         if (tarifa != null)
         {
+            var minutosEfectivos = Math.Max(0, minutosTranscurridos - tarifa.MinutosCortesia);
             int minutosCobrables;
-            if (minutosTranscurridos <= tarifa.MinutosTolerancia)
+            if (minutosEfectivos <= tarifa.MinutosTolerancia)
             {
                 minutosCobrables = 0;
             }
-            else if (minutosTranscurridos < tarifa.MinutosMinimo)
+            else if (minutosEfectivos < tarifa.MinutosMinimo)
             {
                 minutosCobrables = tarifa.MinutosMinimo;
             }
             else
             {
-                minutosCobrables = minutosTranscurridos;
+                minutosCobrables = minutosEfectivos;
             }
 
             mesa.MontoTiempoCalculado = Math.Round(minutosCobrables * (tarifa.PrecioPorHora / 60m), 2);
@@ -804,6 +866,37 @@ public class SupabaseService
         {
             Console.WriteLine($"Error agregando consumo: {ex.Message}");
             return false;
+        }
+    }
+
+    public async Task<(bool Exito, int Procesados, string? Error)> AgregarVariosConsumosMesaAsync(Guid sesionId, IEnumerable<(Guid ProductoId, int Cantidad)> consumos)
+    {
+        try
+        {
+            var userId = Client.Auth.CurrentUser?.Id;
+            int count = 0;
+            foreach (var item in consumos)
+            {
+                var parameters = new Dictionary<string, object?>
+                {
+                    { "p_sesion_id", sesionId.ToString() },
+                    { "p_producto_id", item.ProductoId.ToString() },
+                    { "p_cantidad", item.Cantidad },
+                    { "p_usuario_id", userId }
+                };
+
+                await Client.Rpc("agregar_consumo_mesa", parameters);
+                count++;
+            }
+
+            OnMesasUpdated?.Invoke();
+            return (true, count, null);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error agregando consumos a la mesa: {ex.Message}");
+            OnMesasUpdated?.Invoke();
+            return (false, 0, ex.Message);
         }
     }
 
@@ -1147,6 +1240,25 @@ public class SupabaseService
         }
     }
 
+    public async Task<List<CajaModel>> GetHistorialCajasAsync(int limite = 50)
+    {
+        try
+        {
+            var response = await Client.From<CajaModel>()
+                .Where(c => c.Estado == "cerrada")
+                .Order(c => c.HoraCierre, Supabase.Postgrest.Constants.Ordering.Descending)
+                .Limit(limite)
+                .Get();
+
+            return response.Models ?? new List<CajaModel>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error obteniendo historial de cajas: {ex.Message}");
+            return new List<CajaModel>();
+        }
+    }
+
     public async Task<bool> AbrirCajaAsync(string nombre, decimal montoInicial)
     {
         try
@@ -1282,28 +1394,38 @@ public class SupabaseService
 
     public async Task<bool> GuardarTarifaAsync(TarifaModel tarifa)
     {
-        try
+        for (int intento = 0; intento < 2; intento++)
         {
-            if (tarifa.Id == Guid.Empty)
+            try
             {
-                tarifa.Id = Guid.NewGuid();
-                tarifa.CreadoEn = DateTime.UtcNow;
-                tarifa.ActualizadoEn = DateTime.UtcNow;
-                await Client.From<TarifaModel>().Insert(tarifa);
+                if (tarifa.Id == Guid.Empty)
+                {
+                    tarifa.Id = Guid.NewGuid();
+                    tarifa.CreadoEn = DateTime.UtcNow;
+                    tarifa.ActualizadoEn = DateTime.UtcNow;
+                    await Client.From<TarifaModel>().Insert(tarifa);
+                }
+                else
+                {
+                    tarifa.ActualizadoEn = DateTime.UtcNow;
+                    await Client.From<TarifaModel>().Update(tarifa);
+                }
+                OnMesasUpdated?.Invoke();
+                return true;
             }
-            else
+            catch (Exception ex)
             {
-                tarifa.ActualizadoEn = DateTime.UtcNow;
-                await Client.From<TarifaModel>().Update(tarifa);
+                Console.WriteLine($"Error guardando tarifa: {ex.Message}");
+                if (intento == 0 && (ex.Message.Contains("JWT expired") || ex.Message.Contains("PGRST303") || ex.Message.Contains("401")))
+                {
+                    Console.WriteLine("JWT expirado detectado al guardar tarifa. Intentando renovar sesión...");
+                    var renovado = await RefrescarSesionExpiradaAsync();
+                    if (renovado) continue;
+                }
+                return false;
             }
-            OnMesasUpdated?.Invoke();
-            return true;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error guardando tarifa: {ex.Message}");
-            return false;
-        }
+        return false;
     }
 
     public async Task<bool> EliminarTarifaAsync(Guid tarifaId)
@@ -1358,6 +1480,8 @@ public class SupabaseService
         {
             var response = await Client.From<ReservaMesaModel>()
                 .Where(r => r.Estado == "activa")
+                .Order(r => r.Fecha, Supabase.Postgrest.Constants.Ordering.Ascending)
+                .Order(r => r.HoraInicio, Supabase.Postgrest.Constants.Ordering.Ascending)
                 .Get();
             return response.Models;
         }
@@ -1369,11 +1493,23 @@ public class SupabaseService
 
     public async Task<bool> CrearReservaMesaAsync(Guid mesaId, string clienteNombre, string? telefono, DateTime fecha, TimeSpan horaInicio, TimeSpan horaFin, int toleranciaMinutos = 15, string? notas = null)
     {
-        var dtInicioLocal = new DateTime(fecha.Year, fecha.Month, fecha.Day, horaInicio.Hours, horaInicio.Minutes, 0, DateTimeKind.Local);
-        var dtFinLocal = new DateTime(fecha.Year, fecha.Month, fecha.Day, horaFin.Hours, horaFin.Minutes, 0, DateTimeKind.Local);
+        // Obtener el offset de zona horaria local del navegador (Bolivia: UTC-4 => -240 min => TimeSpan -4h)
+        TimeSpan localOffset;
+        try
+        {
+            var offsetMinutes = await _jsRuntime.InvokeAsync<int>("eval", "new Date().getTimezoneOffset()");
+            localOffset = TimeSpan.FromMinutes(-offsetMinutes);
+        }
+        catch
+        {
+            localOffset = TimeSpan.FromHours(-4);
+        }
 
-        var inicioUtc = dtInicioLocal.ToUniversalTime();
-        var finUtc = dtFinLocal.ToUniversalTime();
+        var dtInicio = new DateTime(fecha.Year, fecha.Month, fecha.Day, horaInicio.Hours, horaInicio.Minutes, 0, DateTimeKind.Unspecified);
+        var dtFin = new DateTime(fecha.Year, fecha.Month, fecha.Day, horaFin.Hours, horaFin.Minutes, 0, DateTimeKind.Unspecified);
+
+        var inicioUtc = new DateTimeOffset(dtInicio, localOffset).UtcDateTime;
+        var finUtc = new DateTimeOffset(dtFin, localOffset).UtcDateTime;
 
         // 1. Intentar llamar al procedimiento almacenado RPC de Supabase (atómico)
         try
@@ -1411,8 +1547,8 @@ public class SupabaseService
                 ClienteNombre = clienteNombre.Trim(),
                 Telefono = telefono?.Trim(),
                 Fecha = fecha.Date,
-                HoraInicio = horaInicio.ToString(@"hh\:mm"),
-                HoraFin = horaFin.ToString(@"hh\:mm"),
+                HoraInicio = horaInicio.ToString(@"hh\:mm\:ss"),
+                HoraFin = horaFin.ToString(@"hh\:mm\:ss"),
                 InicioUtc = inicioUtc,
                 FinUtc = finUtc,
                 MinutosToleranciaLlegada = toleranciaMinutos,
@@ -1498,10 +1634,21 @@ public class SupabaseService
         }
         catch { }
 
-        // 2. Fallback en C#
+        // 2. Fallback en C# con hora local del cliente
         try
         {
-            var ahoraUtc = DateTime.UtcNow;
+            TimeSpan localOffset;
+            try
+            {
+                var offsetMinutes = await _jsRuntime.InvokeAsync<int>("eval", "new Date().getTimezoneOffset()");
+                localOffset = TimeSpan.FromMinutes(-offsetMinutes);
+            }
+            catch
+            {
+                localOffset = TimeSpan.FromHours(-4);
+            }
+
+            var ahoraLocal = DateTime.UtcNow.Add(localOffset);
             var response = await Client.From<ReservaMesaModel>()
                 .Where(r => r.Estado == "activa")
                 .Get();
@@ -1509,9 +1656,18 @@ public class SupabaseService
             var expiradas = 0;
             foreach (var r in response.Models)
             {
-                var toleranciaUtc = r.InicioUtc.AddMinutes(r.MinutosToleranciaLlegada);
+                TimeSpan tsInicio = TimeSpan.Zero;
+                TimeSpan tsFin = TimeSpan.Zero;
+                if (!string.IsNullOrWhiteSpace(r.HoraInicio)) TimeSpan.TryParse(r.HoraInicio, out tsInicio);
+                if (!string.IsNullOrWhiteSpace(r.HoraFin)) TimeSpan.TryParse(r.HoraFin, out tsFin);
+
+                var fechaLocal = r.Fecha.Date;
+                var reservaInicioLocal = new DateTime(fechaLocal.Year, fechaLocal.Month, fechaLocal.Day, tsInicio.Hours, tsInicio.Minutes, 0);
+                var reservaFinLocal = new DateTime(fechaLocal.Year, fechaLocal.Month, fechaLocal.Day, tsFin.Hours, tsFin.Minutes, 0);
+                var toleranciaLocal = reservaInicioLocal.AddMinutes(r.MinutosToleranciaLlegada);
+
                 // Si la hora de fin ya pasó O si ya pasaron los minutos de tolerancia tras la hora de inicio
-                if (ahoraUtc > r.FinUtc || ahoraUtc > toleranciaUtc)
+                if (ahoraLocal > reservaFinLocal || ahoraLocal > toleranciaLocal)
                 {
                     r.Estado = "expirada";
                     await Client.From<ReservaMesaModel>().Update(r);

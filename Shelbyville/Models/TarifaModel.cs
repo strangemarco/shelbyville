@@ -24,6 +24,9 @@ public class TarifaModel : BaseModel
     [Column("minutos_tolerancia")]
     public int MinutosTolerancia { get; set; } = 5;
 
+    [Column("minutos_cortesia")]
+    public int MinutosCortesia { get; set; } = 0;
+
     [Column("activo")]
     public bool Activo { get; set; } = true;
 

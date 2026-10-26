@@ -16,7 +16,7 @@
                 @foreach (var t in Tarifas)
                 {
                     <MudSelectItem T="Guid?" Value="@((Guid?)t.Id)">
-                        @t.Nombre - Bs. @t.PrecioPorHora.ToString("N2")/hr (Mín. @t.MinutosMinimo min)
+                        @t.Nombre - Bs. @t.PrecioPorHora.ToString("N2")/hr @(t.MinutosCortesia > 0 ? $"({t.MinutosCortesia} min gratis)" : $"(Mín. {t.MinutosMinimo} min)")
                     </MudSelectItem>
                 }
             </MudSelect>

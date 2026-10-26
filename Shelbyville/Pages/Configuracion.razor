@@ -27,7 +27,6 @@
             <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.BookOnline" Class="btn-touch" Style="background: #0284C7; color: #FFF; font-weight: 700;" OnClick="AbrirModalNuevaReserva">
                 Reservar Mesa
             </MudButton>
-            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarTodoAsync" />
         </div>
     </div>
 
@@ -140,7 +139,7 @@
                                     @if (context.ReservaActiva != null)
                                     {
                                         <div style="font-size: 11px; color: #38BDF8;">
-                                            📅 Reservada para: @context.ReservaActiva.ClienteNombre (@context.ReservaActiva.HoraInicio - @context.ReservaActiva.HoraFin)
+                                            <i class="fa-solid fa-calendar-check me-1"></i>Reservada para: @context.ReservaActiva.ClienteNombre (@context.ReservaActiva.HoraInicio - @context.ReservaActiva.HoraFin)
                                         </div>
                                     }
                                 </MudTd>
@@ -238,8 +237,9 @@
                             <HeaderContent>
                                 <MudTh>Nombre / Descripción</MudTh>
                                 <MudTh>Precio por Hora</MudTh>
+                                <MudTh>Cortesía / Promo</MudTh>
                                 <MudTh>Cobro Mínimo</MudTh>
-                                <MudTh>Tolerancia de Gracia</MudTh>
+                                <MudTh>Tolerancia</MudTh>
                                 <MudTh>Estado</MudTh>
                                 <MudTh Style="text-align: right;">Acciones</MudTh>
                             </HeaderContent>
@@ -252,6 +252,18 @@
                                     <span class="font-heading text-gold tabular-nums" style="font-size: 18px; font-weight: 800;">
                                         Bs. @context.PrecioPorHora.ToString("N2")/hr
                                     </span>
+                                </MudTd>
+                                <MudTd DataLabel="Cortesía">
+                                    @if (context.MinutosCortesia > 0)
+                                    {
+                                        <span class="px-2 py-1" style="background: rgba(212, 175, 55, 0.15); color: var(--color-gold); border-radius: 12px; font-size: 11px; font-weight: 700;">
+                                            <i class="fa-solid fa-gift me-1"></i>@context.MinutosCortesia min gratis
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span style="font-size: 12px; color: var(--text-secondary);">-</span>
+                                    }
                                 </MudTd>
                                 <MudTd DataLabel="Cobro Mínimo">
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
@@ -362,7 +374,7 @@
                                     @if (!string.IsNullOrWhiteSpace(context.Telefono))
                                     {
                                         <div style="font-size: 11px; color: var(--text-secondary);">
-                                            📞 @context.Telefono
+                                            <i class="fa-solid fa-phone me-1" style="font-size: 10px;"></i>@context.Telefono
                                         </div>
                                     }
                                 </MudTd>

@@ -17,7 +17,7 @@
                 @foreach (var m in MesasDisponibles)
                 {
                     <MudSelectItem T="Guid" Value="@m.Id">
-                        Mesa @m.Numero - @m.Nombre (@m.Tipo) @(m.Estado == "ocupada" ? "⚠️ En Juego actual" : "✓ Libre")
+                        Mesa @m.Numero - @m.Nombre (@m.Tipo) @(m.Estado == "ocupada" ? "(En Juego actual)" : "(Libre)")
                     </MudSelectItem>
                 }
             </MudSelect>
@@ -42,7 +42,7 @@
             <div class="pa-3" style="background: rgba(56, 189, 248, 0.08); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3);">
                 <div class="d-flex justify-space-between align-center mb-1">
                     <span style="font-weight: 700; color: #38BDF8; font-size: 13px;">
-                        ⏱️ Tolerancia de Llegada (Auto-Liberación)
+                        <i class="fa-solid fa-stopwatch me-1"></i> Tolerancia de Llegada (Auto-Liberación)
                     </span>
                     <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">
                         @_toleranciaMinutos min

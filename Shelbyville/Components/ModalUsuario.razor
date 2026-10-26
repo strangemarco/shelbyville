@@ -15,9 +15,29 @@
             
             @if (_esNuevo)
             {
-                <MudTextField @bind-Value="_email" Label="Correo Electrónico (Acceso)" Placeholder="ejemplo@shelbyville.com" Required="true" Variant="Variant.Outlined" InputType="InputType.Email" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Email" />
+                <MudTextField @bind-Value="UsuarioAlias" 
+                              Label="Usuario de Acceso" 
+                              Placeholder="usuario" 
+                              Required="true" 
+                              Variant="Variant.Outlined" 
+                              Adornment="Adornment.End" 
+                              AdornmentText="@DOMINIO_CORREO" 
+                              AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
+                              Immediate="true" 
+                              UserAttributes="@_attrsUsuario"
+                              HelperText="@($"El correo de acceso será: {EmailFinal}")" />
 
-                <MudTextField @bind-Value="_password" Label="Contraseña de Acceso" Placeholder="Mínimo 6 caracteres" Required="true" Variant="Variant.Outlined" InputType="_mostrarPassword ? InputType.Text : InputType.Password" Adornment="Adornment.End" AdornmentIcon="@(_mostrarPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)" OnAdornmentClick="@(() => _mostrarPassword = !_mostrarPassword)" HelperText="La contraseña que usará el empleado para iniciar sesión en el sistema." />
+                <MudTextField @bind-Value="_password" 
+                              Label="Contraseña de Acceso" 
+                              Placeholder="Mínimo 6 caracteres" 
+                              Required="true" 
+                              Variant="Variant.Outlined" 
+                              InputType="_mostrarPassword ? InputType.Text : InputType.Password" 
+                              Adornment="Adornment.End" 
+                              AdornmentIcon="@(_mostrarPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)" 
+                              OnAdornmentClick="@(() => _mostrarPassword = !_mostrarPassword)" 
+                              UserAttributes="@_attrsPassword"
+                              HelperText="La contraseña que usará el empleado para iniciar sesión en el sistema." />
             }
             else
             {
@@ -95,6 +115,29 @@
 
     private bool _esNuevo => Perfil == null || Perfil.Id == Guid.Empty;
 
+    private const string DOMINIO_CORREO = "@shelbyville.com";
+    private string _usuarioAlias = "usuario";
+
+    public string UsuarioAlias
+    {
+        get => _usuarioAlias;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _usuarioAlias = string.Empty;
+                return;
+            }
+
+            var limpio = value.Trim().ToLowerInvariant();
+            if (limpio.Contains('@'))
+            {
+                limpio = limpio.Split('@')[0];
+            }
+            _usuarioAlias = System.Text.RegularExpressions.Regex.Replace(limpio, @"[^a-z0-9._-]", "");
+        }
+    }
+
     private string _email = string.Empty;
     private string _password = string.Empty;
     private bool _mostrarPassword;
@@ -104,9 +147,55 @@
     private bool _activo = true;
     private bool _procesando;
 
+    private static readonly Dictionary<string, object> _attrsUsuario = new()
+    {
+        { "autocomplete", "chrome-off" },
+        { "autocorrect", "off" },
+        { "spellcheck", "false" },
+        { "name", "new_employee_alias_field" }
+    };
+
+    private static readonly Dictionary<string, object> _attrsPassword = new()
+    {
+        { "autocomplete", "new-password" },
+        { "name", "new_employee_password_field" }
+    };
+
+    private string EmailFinal
+    {
+        get
+        {
+            if (!_esNuevo) return _email;
+
+            var limpio = (_usuarioAlias ?? string.Empty).Trim().ToLowerInvariant();
+            if (limpio.Contains('@'))
+            {
+                limpio = limpio.Split('@')[0];
+            }
+            if (string.IsNullOrWhiteSpace(limpio))
+            {
+                limpio = "usuario";
+            }
+            limpio = System.Text.RegularExpressions.Regex.Replace(limpio, @"[^a-z0-9._-]", "");
+            if (string.IsNullOrWhiteSpace(limpio)) limpio = "usuario";
+
+            return $"{limpio}{DOMINIO_CORREO}";
+        }
+    }
+
     protected override void OnInitialized()
     {
-        if (Perfil != null)
+        ResetearCampos();
+    }
+
+    protected override void OnParametersSet()
+    {
+        ResetearCampos();
+    }
+
+    private void ResetearCampos()
+    {
+        if (Perfil != null && Perfil.Id != Guid.Empty)
         {
             _email = Perfil.Email ?? string.Empty;
             _nombreCompleto = Perfil.NombreCompleto;
@@ -114,9 +203,16 @@
             _telefono = Perfil.Telefono;
             _activo = Perfil.Activo;
         }
-        else if (Roles.Any())
+        else
         {
-            _rolId = Roles.FirstOrDefault(r => r.Id == "cajero")?.Id ?? Roles.First().Id;
+            _usuarioAlias = "usuario";
+            _email = string.Empty;
+            _password = string.Empty;
+            _mostrarPassword = false;
+            _nombreCompleto = string.Empty;
+            _telefono = null;
+            _activo = true;
+            _rolId = Roles.FirstOrDefault(r => r.Id == "cajero")?.Id ?? (Roles.FirstOrDefault()?.Id ?? "cajero");
         }
     }
 
@@ -132,11 +228,7 @@
 
         if (_esNuevo)
         {
-            if (string.IsNullOrWhiteSpace(_email) || !_email.Contains('@'))
-            {
-                Snackbar.Add("Ingresa un correo electrónico válido", Severity.Warning);
-                return;
-            }
+            var emailACrear = EmailFinal;
 
             if (string.IsNullOrWhiteSpace(_password) || _password.Length < 6)
             {
@@ -145,7 +237,7 @@
             }
 
             _procesando = true;
-            var (exito, mensaje) = await Supabase.AdminCrearUsuarioAsync(_email, _password, _nombreCompleto, _rolId, _telefono);
+            var (exito, mensaje) = await Supabase.AdminCrearUsuarioAsync(emailACrear, _password, _nombreCompleto, _rolId, _telefono);
             _procesando = false;
 
             if (exito)

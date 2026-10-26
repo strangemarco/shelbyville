@@ -30,13 +30,12 @@
         <EditForm Model="@this" OnValidSubmit="IniciarSesionAsync">
             <div class="d-flex flex-column gap-4 mt-2">
                 <MudTextField @bind-Value="_email" 
-                              Label="Correo Electrónico" 
-                              Placeholder="usuario@shelbyville.com" 
+                              Label="Usuario o Correo" 
+                              Placeholder="usuario (ej. marco o marco@shelbyville.com)" 
                               Required="true" 
                               Variant="Variant.Outlined" 
-                              InputType="InputType.Email" 
                               Adornment="Adornment.Start" 
-                              AdornmentIcon="@Icons.Material.Filled.Email" 
+                              AdornmentIcon="@Icons.Material.Filled.Person" 
                               Immediate="true"
                               Disabled="_procesando" />
 
@@ -102,10 +101,16 @@
     {
         _mensajeError = null;
 
-        if (string.IsNullOrWhiteSpace(_email) || !_email.Contains('@'))
+        if (string.IsNullOrWhiteSpace(_email))
         {
-            _mensajeError = "Por favor, ingresa un correo electrónico válido.";
+            _mensajeError = "Por favor, ingresa tu usuario o correo electrónico.";
             return;
+        }
+
+        var emailNormalizado = _email.Trim().ToLowerInvariant();
+        if (!emailNormalizado.Contains('@'))
+        {
+            emailNormalizado = $"{emailNormalizado}@shelbyville.com";
         }
 
         if (string.IsNullOrWhiteSpace(_password))
@@ -115,7 +120,7 @@
         }
 
         _procesando = true;
-        var (exito, error, perfil) = await Supabase.IniciarSesionAsync(_email, _password);
+        var (exito, error, perfil) = await Supabase.IniciarSesionAsync(emailNormalizado, _password);
         _procesando = false;
 
         if (exito)

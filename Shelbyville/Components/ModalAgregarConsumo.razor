@@ -3,78 +3,277 @@
 
 <MudDialog>
     <TitleContent>
-        <div class="d-flex align-center gap-2">
-            <MudIcon Icon="@Icons.Material.Filled.LocalBar" Color="Color.Tertiary" />
-            <MudText Typo="Typo.h6" Class="font-heading">Cargar Consumo - Mesa @Mesa.Numero</MudText>
+        <div class="d-flex align-center justify-space-between w-100 pr-4">
+            <div class="d-flex align-center gap-2">
+                <i class="fa-solid fa-beer-mug-empty text-gold" style="font-size: 1.25rem;"></i>
+                <MudText Typo="Typo.h6" Class="font-heading">Cargar Consumo - Mesa @Mesa.Numero</MudText>
+            </div>
+            @if (_carrito.Any())
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined">
+                    <i class="fa-solid fa-cart-shopping mr-1"></i> @_totalArticulos @(_totalArticulos == 1 ? "artículo" : "artículos")
+                </MudChip>
+            }
         </div>
     </TitleContent>
     <DialogContent>
-        <div class="d-flex flex-column gap-3 py-2" style="max-height: 480px; overflow-y: auto;">
-            <!-- Buscador y filtro -->
-            <MudTextField @bind-Value="_busqueda" Placeholder="Buscar producto (ej. Corona, Papas...)" Immediate="true" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        <MudGrid Spacing="3" Class="py-1">
+            <!-- Columna Izquierda: Búsqueda y Catálogo -->
+            <MudItem xs="12" md="7">
+                <div class="d-flex flex-column gap-3">
+                    <!-- Buscador y filtro de categoría -->
+                    <div class="d-flex flex-column flex-sm-row gap-2">
+                        <MudTextField @bind-Value="_busqueda" 
+                                      Placeholder="Buscar por nombre o código..." 
+                                      Immediate="true" 
+                                      Variant="Variant.Outlined" 
+                                      Margin="Margin.Dense" 
+                                      Adornment="Adornment.Start" 
+                                      AdornmentIcon="@Icons.Material.Filled.Search" 
+                                      Clearable="true" 
+                                      Class="flex-grow-1" />
 
-            <!-- Selector de Producto -->
-            <MudText Typo="Typo.subtitle2" Style="color: var(--text-secondary);">Selecciona un artículo:</MudText>
-
-            <MudGrid Spacing="2">
-                @foreach (var prod in ProductosFiltrados)
-                {
-                    var isSelected = _productoSeleccionado?.Id == prod.Id;
-                    <MudItem xs="12" sm="6">
-                        <div class="pa-3 cursor-pointer d-flex flex-column justify-space-between" 
-                             style="border-radius: 10px; border: 2px solid @(isSelected ? "var(--color-gold)" : "var(--border-color)"); background: @(isSelected ? "var(--bg-elevated)" : "var(--bg-surface)"); height: 100%; transition: all 0.2s;"
-                             @onclick="@(() => SeleccionarProducto(prod))">
-                            <div class="d-flex justify-space-between align-start">
-                                <span style="font-weight: 600; font-size: 14px; color: var(--text-primary);">@prod.Nombre</span>
-                                <span class="text-gold font-heading" style="font-weight: 700; font-size: 15px;">Bs. @prod.PrecioVenta.ToString("N2")</span>
-                            </div>
-                            <div class="d-flex justify-space-between align-center mt-2">
-                                <span style="font-size: 12px; color: @(prod.StockBajo ? "var(--status-pausada)" : "var(--text-secondary)");">
-                                    Stock: @prod.Stock u.
-                                </span>
-                                @if (prod.Stock <= 0)
+                        @if (_categorias.Any())
+                        {
+                            <MudSelect T="Guid?" @bind-Value="_categoriaSeleccionadaId" 
+                                       Label="Categoría" 
+                                       Variant="Variant.Outlined" 
+                                       Margin="Margin.Dense" 
+                                       Dense="true"
+                                       Style="min-width: 150px;">
+                                <MudSelectItem T="Guid?" Value="@((Guid?)null)">Todas</MudSelectItem>
+                                @foreach (var cat in _categorias)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">Agotado</MudChip>
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)cat.Id)">@cat.Nombre</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                    </div>
+
+                    <div class="d-flex justify-space-between align-center">
+                        <MudText Typo="Typo.caption" Style="color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">
+                            Productos Disponibles (@ProductosFiltrados.Count())
+                        </MudText>
+                        <span style="font-size: 11px; color: var(--text-muted);">
+                            <i class="fa-solid fa-hand-pointer mr-1"></i> Clic para agregar
+                        </span>
+                    </div>
+
+                    <!-- Grilla con scroll de productos -->
+                    <div style="max-height: 420px; overflow-y: auto; padding-right: 4px;" class="custom-scroll">
+                        @if (!ProductosFiltrados.Any())
+                        {
+                            <div class="pa-8 text-center text-secondary">
+                                <i class="fa-solid fa-box-open fa-2x mb-2" style="opacity: 0.4;"></i>
+                                <p style="font-size: 13px;">No se encontraron productos disponibles con ese criterio.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudGrid Spacing="2">
+                                @foreach (var prod in ProductosFiltrados)
+                                {
+                                    var itemEnCarrito = _carrito.FirstOrDefault(x => x.Producto.Id == prod.Id);
+                                    var cantEnCarrito = itemEnCarrito?.Cantidad ?? 0;
+                                    var estaEnCarrito = cantEnCarrito > 0;
+                                    var agotado = prod.Stock <= 0;
+                                    var sinStockParaMas = prod.Stock <= cantEnCarrito;
+
+                                    <MudItem xs="12" sm="6">
+                                        <div class="pa-3 cursor-pointer d-flex flex-column justify-space-between"
+                                             style="border-radius: 10px; 
+                                                    border: 2px solid @(estaEnCarrito ? "var(--color-gold)" : "var(--border-color)"); 
+                                                    background: @(estaEnCarrito ? "rgba(212, 175, 55, 0.08)" : "var(--bg-surface)"); 
+                                                    min-height: 100px; 
+                                                    opacity: @(agotado ? "0.55" : "1");
+                                                    position: relative;
+                                                    transition: all 0.2s;"
+                                             @onclick="@(() => AgregarOIncrementar(prod))">
+
+                                            @if (estaEnCarrito)
+                                            {
+                                                <div style="position: absolute; top: -8px; right: -8px; background: var(--color-gold); color: #0b1210; font-weight: 800; font-size: 11px; border-radius: 20px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); z-index: 2;">
+                                                    x@cantEnCarrito
+                                                </div>
+                                            }
+
+                                            <div>
+                                                <div class="d-flex justify-space-between align-start gap-1">
+                                                    <span style="font-weight: 600; font-size: 13px; color: var(--text-primary); line-height: 1.25;">
+                                                        @prod.Nombre
+                                                    </span>
+                                                    <span class="text-gold font-heading" style="font-weight: 700; font-size: 14px; white-space: nowrap;">
+                                                        Bs. @prod.PrecioVenta.ToString("N2")
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex justify-space-between align-center mt-2">
+                                                <span style="font-size: 11.5px; color: @(agotado || prod.StockBajo ? "var(--status-pausada)" : "var(--text-secondary)");">
+                                                    Stock: @prod.Stock u.
+                                                </span>
+
+                                                @if (agotado)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" Class="pa-0 ma-0" Style="font-size: 11px;">
+                                                        Agotado
+                                                    </MudChip>
+                                                }
+                                                else if (estaEnCarrito)
+                                                {
+                                                    <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Remove" 
+                                                                       Size="Size.Small" 
+                                                                       Variant="Variant.Filled"
+                                                                       Color="Color.Default"
+                                                                       Style="width: 24px; height: 24px; min-width: 24px; padding: 0;"
+                                                                       OnClick="@(() => DisminuirCantidad(prod.Id))" />
+                                                        <span style="font-weight: 700; font-size: 12.5px; min-width: 20px; text-align: center;">@cantEnCarrito</span>
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                                                                       Size="Size.Small" 
+                                                                       Variant="Variant.Filled"
+                                                                       Color="Color.Tertiary"
+                                                                       Style="width: 24px; height: 24px; min-width: 24px; padding: 0;"
+                                                                       Disabled="sinStockParaMas"
+                                                                       OnClick="@(() => IncrementarCantidad(prod.Id))" />
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span style="font-size: 11px; color: var(--color-gold); font-weight: 600;">
+                                                        <i class="fa-solid fa-plus mr-1"></i> Agregar
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+                    </div>
+                </div>
+            </MudItem>
+
+            <!-- Columna Derecha: Resumen de Consumos a Cargar -->
+            <MudItem xs="12" md="5">
+                <MudPaper Elevation="0" Class="pa-3 d-flex flex-column h-100" 
+                          Style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 12px; min-height: 430px;">
+                    <div class="d-flex justify-space-between align-center pb-2 mb-2" style="border-bottom: 1px solid var(--border-color);">
+                        <div class="d-flex align-center gap-2">
+                            <i class="fa-solid fa-receipt text-gold"></i>
+                            <MudText Typo="Typo.subtitle1" Class="font-heading" Style="font-weight: 600; font-size: 14.5px;">Consumos a Cargar</MudText>
+                        </div>
+                        @if (_carrito.Any())
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="LimpiarCarrito" StartIcon="@Icons.Material.Filled.DeleteSweep">
+                                Vaciar
+                            </MudButton>
+                        }
+                    </div>
+
+                    @if (!_carrito.Any())
+                    {
+                        <div class="d-flex flex-column align-center justify-center flex-grow-1 text-center py-6" style="color: var(--text-muted);">
+                            <i class="fa-solid fa-cart-shopping fa-3x mb-3" style="opacity: 0.3;"></i>
+                            <p style="font-size: 14px; margin: 0; font-weight: 600; color: var(--text-secondary);">Ningún producto seleccionado</p>
+                            <p style="font-size: 12px; margin-top: 6px; color: var(--text-muted); max-width: 220px;">
+                                Selecciona varios productos del catálogo de la izquierda para cargarlos juntos a la cuenta de la mesa.
+                            </p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex-grow-1 custom-scroll" style="max-height: 290px; overflow-y: auto; padding-right: 2px;">
+                            <div class="d-flex flex-column gap-2">
+                                @foreach (var item in _carrito)
+                                {
+                                    <div class="pa-2 d-flex align-center justify-space-between" 
+                                         style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px;">
+                                        <div style="flex: 1; min-width: 0;" class="mr-2">
+                                            <div style="font-weight: 600; font-size: 12.5px; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                                @item.Producto.Nombre
+                                            </div>
+                                            <div style="font-size: 11.5px; color: var(--text-secondary);">
+                                                Bs. @item.Producto.PrecioVenta.ToString("N2") c/u • <strong class="text-gold">Bs. @item.Subtotal.ToString("N2")</strong>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex align-center gap-1">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Remove" 
+                                                           Size="Size.Small" 
+                                                           OnClick="@(() => DisminuirCantidad(item.Producto.Id))" 
+                                                           Style="width: 26px; height: 26px; min-width: 26px;" />
+                                            <span style="font-weight: 700; font-size: 12.5px; min-width: 20px; text-align: center;">@item.Cantidad</span>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                                                           Size="Size.Small" 
+                                                           Disabled="@(item.Cantidad >= item.Producto.Stock)" 
+                                                           OnClick="@(() => IncrementarCantidad(item.Producto.Id))" 
+                                                           Style="width: 26px; height: 26px; min-width: 26px;" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" 
+                                                           Color="Color.Error" 
+                                                           Size="Size.Small" 
+                                                           OnClick="@(() => EliminarItem(item.Producto.Id))" 
+                                                           Style="width: 26px; height: 26px; min-width: 26px;" />
+                                        </div>
+                                    </div>
                                 }
                             </div>
                         </div>
-                    </MudItem>
-                }
-            </MudGrid>
 
-            @if (_productoSeleccionado != null)
-            {
-                <MudPaper Class="pa-3 mt-3 d-flex align-center justify-space-between" Style="background: var(--bg-elevated); border: 1px solid var(--color-gold); border-radius: 10px;">
-                    <div>
-                        <div style="font-weight: 600; color: var(--color-gold);">@_productoSeleccionado.Nombre</div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">Subtotal: Bs. @((_cantidad * _productoSeleccionado.PrecioVenta).ToString("N2"))</div>
-                    </div>
-                    <div class="d-flex align-center gap-2">
-                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="DisminuirCantidad" Disabled="_cantidad <= 1" />
-                        <span style="font-weight: 700; font-size: 16px; min-width: 24px; text-align: center;">@_cantidad</span>
-                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="AumentarCantidad" Disabled="_cantidad >= _productoSeleccionado.Stock" />
-                    </div>
+                        <!-- Resumen inferior -->
+                        <div class="pt-3 mt-2" style="border-top: 1px dashed var(--border-color);">
+                            <div class="d-flex justify-space-between align-center mb-1" style="font-size: 12px; color: var(--text-secondary);">
+                                <span>Total artículos:</span>
+                                <span style="font-weight: 600; color: var(--text-primary);">@_totalArticulos unidades</span>
+                            </div>
+                            <div class="d-flex justify-space-between align-center">
+                                <span class="font-heading" style="font-size: 14px; font-weight: 600;">Total a Cargar:</span>
+                                <span class="font-heading text-gold" style="font-size: 18px; font-weight: 700;">
+                                    Bs. @_totalMonto.ToString("N2")
+                                </span>
+                            </div>
+                        </div>
+                    }
                 </MudPaper>
-            }
-        </div>
+            </MudItem>
+        </MudGrid>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancelar" Variant="Variant.Text">Cancelar</MudButton>
-        <MudButton Color="Color.Tertiary" Variant="Variant.Filled" OnClick="ConfirmarConsumo" Disabled="_productoSeleccionado == null || _procesando" Class="btn-touch">
+        <MudButton Color="Color.Tertiary" 
+                   Variant="Variant.Filled" 
+                   OnClick="ConfirmarConsumos" 
+                   Disabled="!_carrito.Any() || _procesando" 
+                   Class="btn-touch">
             @if (_procesando)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                <span>Cargando...</span>
+                <span>Cargando consumos...</span>
             }
             else
             {
-                <span>Cargar a la Mesa</span>
+                <i class="fa-solid fa-check mr-2"></i>
+                @if (_carrito.Any())
+                {
+                    <span>Cargar a la Mesa (@_totalArticulos art. - Bs. @_totalMonto.ToString("N2"))</span>
+                }
+                else
+                {
+                    <span>Cargar a la Mesa</span>
+                }
             }
         </MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
+    public class ItemConsumo
+    {
+        public ProductoModel Producto { get; set; } = default!;
+        public int Cantidad { get; set; } = 1;
+        public decimal Subtotal => Cantidad * Producto.PrecioVenta;
+    }
+
     [CascadingParameter]
     private IMudDialogInstance MudDialog { get; set; } = default!;
 
@@ -85,52 +284,114 @@
     public List<ProductoModel> Productos { get; set; } = new();
 
     private string _busqueda = string.Empty;
-    private ProductoModel? _productoSeleccionado;
-    private int _cantidad = 1;
+    private Guid? _categoriaSeleccionadaId;
+    private List<CategoriaModel> _categorias = new();
+    private List<ItemConsumo> _carrito = new();
     private bool _procesando;
 
-    private IEnumerable<ProductoModel> ProductosFiltrados =>
-        string.IsNullOrWhiteSpace(_busqueda)
-            ? Productos.Where(p => p.Activo)
-            : Productos.Where(p => p.Activo && p.Nombre.Contains(_busqueda, StringComparison.OrdinalIgnoreCase));
+    private int _totalArticulos => _carrito.Sum(x => x.Cantidad);
+    private decimal _totalMonto => _carrito.Sum(x => x.Subtotal);
 
-    private void SeleccionarProducto(ProductoModel prod)
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _categorias = await Supabase.GetCategoriasAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar categorías en modal consumo: {ex.Message}");
+        }
+    }
+
+    private IEnumerable<ProductoModel> ProductosFiltrados =>
+        Productos
+            .Where(p => p.Activo)
+            .Where(p => _categoriaSeleccionadaId == null || p.CategoriaId == _categoriaSeleccionadaId)
+            .Where(p => string.IsNullOrWhiteSpace(_busqueda) 
+                        || p.Nombre.Contains(_busqueda, StringComparison.OrdinalIgnoreCase)
+                        || (!string.IsNullOrEmpty(p.Codigo) && p.Codigo.Contains(_busqueda, StringComparison.OrdinalIgnoreCase)));
+
+    private void AgregarOIncrementar(ProductoModel prod)
     {
         if (prod.Stock <= 0) return;
-        _productoSeleccionado = prod;
-        _cantidad = 1;
+
+        var item = _carrito.FirstOrDefault(x => x.Producto.Id == prod.Id);
+        if (item != null)
+        {
+            if (item.Cantidad < prod.Stock)
+            {
+                item.Cantidad++;
+            }
+            else
+            {
+                Snackbar.Add($"Stock máximo alcanzado para {prod.Nombre} ({prod.Stock} u.)", Severity.Warning);
+            }
+        }
+        else
+        {
+            _carrito.Add(new ItemConsumo
+            {
+                Producto = prod,
+                Cantidad = 1
+            });
+        }
     }
 
-    private void AumentarCantidad()
+    private void IncrementarCantidad(Guid productoId)
     {
-        if (_productoSeleccionado != null && _cantidad < _productoSeleccionado.Stock)
-            _cantidad++;
+        var item = _carrito.FirstOrDefault(x => x.Producto.Id == productoId);
+        if (item != null && item.Cantidad < item.Producto.Stock)
+        {
+            item.Cantidad++;
+        }
     }
 
-    private void DisminuirCantidad()
+    private void DisminuirCantidad(Guid productoId)
     {
-        if (_cantidad > 1)
-            _cantidad--;
+        var item = _carrito.FirstOrDefault(x => x.Producto.Id == productoId);
+        if (item != null)
+        {
+            if (item.Cantidad > 1)
+            {
+                item.Cantidad--;
+            }
+            else
+            {
+                _carrito.Remove(item);
+            }
+        }
+    }
+
+    private void EliminarItem(Guid productoId)
+    {
+        _carrito.RemoveAll(x => x.Producto.Id == productoId);
+    }
+
+    private void LimpiarCarrito()
+    {
+        _carrito.Clear();
     }
 
     private void Cancelar() => MudDialog.Cancel();
 
-    private async Task ConfirmarConsumo()
+    private async Task ConfirmarConsumos()
     {
-        if (Mesa.SesionActiva == null || _productoSeleccionado == null) return;
+        if (Mesa.SesionActiva == null || !_carrito.Any()) return;
 
         _procesando = true;
-        var exito = await Supabase.AgregarConsumoMesaAsync(Mesa.SesionActiva.Id, _productoSeleccionado.Id, _cantidad);
+        var consumos = _carrito.Select(c => (ProductoId: c.Producto.Id, Cantidad: c.Cantidad)).ToList();
+        var (exito, procesados, error) = await Supabase.AgregarVariosConsumosMesaAsync(Mesa.SesionActiva.Id, consumos);
         _procesando = false;
 
         if (exito)
         {
-            Snackbar.Add($"Consumo agregado a Mesa {Mesa.Numero}", Severity.Success);
+            Snackbar.Add($"Se cargaron {procesados} artículos a la Mesa {Mesa.Numero}", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }
         else
         {
-            Snackbar.Add("Error al cargar el consumo a la mesa", Severity.Error);
+            Snackbar.Add($"Error al cargar los consumos a la mesa: {error ?? "Ocurrió un error inesperado"}", Severity.Error);
         }
     }
 }

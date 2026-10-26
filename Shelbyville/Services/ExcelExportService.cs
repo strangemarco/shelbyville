@@ -452,6 +452,159 @@ public class ExcelExportService
     }
 
     // =========================================================================
+    // 4. EXPORTACIÓN DE HISTORIAL DE CAJAS Y ARQUEOS
+    // =========================================================================
+    public async Task ExportarHistorialCajasAsync(List<CajaModel> cajas, List<PerfilModel> perfiles)
+    {
+        var dictPerfiles = perfiles.Where(p => !string.IsNullOrWhiteSpace(p.NombreCompleto))
+                                  .ToDictionary(p => p.Id.ToString().ToLowerInvariant(), p => p.NombreCompleto);
+
+        using var memoryStream = new MemoryStream();
+        using (var document = SpreadsheetDocument.Create(memoryStream, SpreadsheetDocumentType.Workbook))
+        {
+            var workbookPart = document.AddWorkbookPart();
+            workbookPart.Workbook = new Workbook();
+
+            var stylesPart = workbookPart.AddNewPart<WorkbookStylesPart>();
+            stylesPart.Stylesheet = CreateStylesheet();
+            stylesPart.Stylesheet.Save();
+
+            var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+            var worksheet = new Worksheet();
+
+            var columns = new Columns();
+            columns.Append(CreateColumn(1, 1, 8));   // N°
+            columns.Append(CreateColumn(2, 2, 28));  // Turno / Caja
+            columns.Append(CreateColumn(3, 3, 18));  // Apertura
+            columns.Append(CreateColumn(4, 4, 18));  // Cierre
+            columns.Append(CreateColumn(5, 5, 18));  // Fondo Inicial
+            columns.Append(CreateColumn(6, 6, 20));  // Ventas Efectivo
+            columns.Append(CreateColumn(7, 7, 18));  // Ventas QR
+            columns.Append(CreateColumn(8, 8, 22));  // Esperado Efectivo
+            columns.Append(CreateColumn(9, 9, 20));  // Real Contado
+            columns.Append(CreateColumn(10, 10, 18)); // Diferencia
+            columns.Append(CreateColumn(11, 11, 16)); // Estado Arqueo
+            columns.Append(CreateColumn(12, 12, 25)); // Responsable Cierre
+            columns.Append(CreateColumn(13, 13, 40)); // Observaciones
+            worksheet.Append(columns);
+
+            var sheetData = new SheetData();
+
+            // Fila 1: Título Principal
+            var r1 = new Row();
+            r1.Append(CreateTextCell("SHELBYVILLE BILLIARD CLUB - HISTORIAL DE TURNOS Y ARQUEOS DE CAJA", 1));
+            sheetData.Append(r1);
+
+            // Fila 2: Subtítulo / Metadatos
+            var r2 = new Row();
+            r2.Append(CreateTextCell($"Generado: {DateTime.Now:dd/MM/yyyy HH:mm:ss} | Total Turnos Listados: {cajas.Count}", 2));
+            sheetData.Append(r2);
+
+            sheetData.Append(new Row());
+
+            // Fila 4: Encabezados
+            var hr = new Row();
+            hr.Append(CreateTextCell("N°", 3));
+            hr.Append(CreateTextCell("TURNO / CAJA", 4));
+            hr.Append(CreateTextCell("APERTURA", 3));
+            hr.Append(CreateTextCell("CIERRE", 3));
+            hr.Append(CreateTextCell("FONDO INICIAL (Bs.)", 5));
+            hr.Append(CreateTextCell("VENTAS EFECTIVO (Bs.)", 5));
+            hr.Append(CreateTextCell("VENTAS QR (Bs.)", 5));
+            hr.Append(CreateTextCell("ESPERADO (Bs.)", 5));
+            hr.Append(CreateTextCell("REAL CONTADO (Bs.)", 5));
+            hr.Append(CreateTextCell("DIFERENCIA (Bs.)", 5));
+            hr.Append(CreateTextCell("ESTADO ARQUEO", 3));
+            hr.Append(CreateTextCell("RESPONSABLE CIERRE", 4));
+            hr.Append(CreateTextCell("OBSERVACIONES / NOTAS", 4));
+            sheetData.Append(hr);
+
+            decimal totalFondoInicial = 0;
+            decimal totalVentasEfectivo = 0;
+            decimal totalVentasQr = 0;
+            decimal totalEsperado = 0;
+            decimal totalRealContado = 0;
+            decimal totalDiferencia = 0;
+            int num = 1;
+
+            foreach (var c in cajas)
+            {
+                var row = new Row();
+                var real = c.MontoRealEfectivo ?? 0;
+                var dif = c.Diferencia ?? (real - c.MontoEsperadoEfectivo);
+                var estadoArqueo = dif == 0 ? "Exacto" : (dif > 0 ? $"Sobrante (+{dif:N2})" : $"Faltante ({dif:N2})");
+
+                string responsable = "Cajero";
+                if (!string.IsNullOrWhiteSpace(c.UsuarioCierreId))
+                {
+                    var uidKey = c.UsuarioCierreId.ToLowerInvariant();
+                    if (dictPerfiles.TryGetValue(uidKey, out var nombre))
+                    {
+                        responsable = nombre;
+                    }
+                }
+
+                totalFondoInicial += c.MontoInicial;
+                totalVentasEfectivo += c.MontoVentasEfectivo;
+                totalVentasQr += c.MontoVentasQr;
+                totalEsperado += c.MontoEsperadoEfectivo;
+                totalRealContado += real;
+                totalDiferencia += dif;
+
+                row.Append(CreateNumberCell(num++, 7));
+                row.Append(CreateTextCell(c.Nombre, 6));
+                row.Append(CreateTextCell(c.HoraApertura.ToLocalTime().ToString("dd/MM/yyyy HH:mm"), 7));
+                row.Append(CreateTextCell(c.HoraCierre.HasValue ? c.HoraCierre.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "-", 7));
+                row.Append(CreateNumberCell(c.MontoInicial, 8));
+                row.Append(CreateNumberCell(c.MontoVentasEfectivo, 8));
+                row.Append(CreateNumberCell(c.MontoVentasQr, 8));
+                row.Append(CreateNumberCell(c.MontoEsperadoEfectivo, 8));
+                row.Append(CreateNumberCell(real, 8));
+                row.Append(CreateNumberCell(dif, 8));
+                row.Append(CreateTextCell(estadoArqueo, 7));
+                row.Append(CreateTextCell(responsable, 6));
+                row.Append(CreateTextCell(string.IsNullOrWhiteSpace(c.Observaciones) ? "Sin notas" : c.Observaciones, 6));
+
+                sheetData.Append(row);
+            }
+
+            // Fila de Totales
+            var totalRow = new Row();
+            totalRow.Append(CreateTextCell("TOTALES GENERALES", 10));
+            totalRow.Append(CreateTextCell("", 10));
+            totalRow.Append(CreateTextCell("", 10));
+            totalRow.Append(CreateTextCell("", 10));
+            totalRow.Append(CreateNumberCell(totalFondoInicial, 9));
+            totalRow.Append(CreateNumberCell(totalVentasEfectivo, 9));
+            totalRow.Append(CreateNumberCell(totalVentasQr, 9));
+            totalRow.Append(CreateNumberCell(totalEsperado, 9));
+            totalRow.Append(CreateNumberCell(totalRealContado, 9));
+            totalRow.Append(CreateNumberCell(totalDiferencia, 9));
+            totalRow.Append(CreateTextCell("", 10));
+            totalRow.Append(CreateTextCell("", 10));
+            totalRow.Append(CreateTextCell("", 10));
+            sheetData.Append(totalRow);
+
+            worksheet.Append(sheetData);
+            worksheetPart.Worksheet = worksheet;
+            worksheetPart.Worksheet.Save();
+
+            var sheets = workbookPart.Workbook.AppendChild(new Sheets());
+            sheets.Append(new Sheet()
+            {
+                Id = workbookPart.GetIdOfPart(worksheetPart),
+                SheetId = 1,
+                Name = "Historial Cajas"
+            });
+
+            workbookPart.Workbook.Save();
+        }
+
+        var nombreArchivo = $"Historial_Cajas_Shelbyville_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+        await DescargarExcelAsync(memoryStream.ToArray(), nombreArchivo);
+    }
+
+    // =========================================================================
     // HELPERS DE OPENXML SPREADSHEET
     // =========================================================================
     private static Column CreateColumn(uint startColumn, uint endColumn, double width)

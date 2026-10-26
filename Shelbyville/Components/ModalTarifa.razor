@@ -18,11 +18,24 @@
 
             <div class="d-flex gap-3">
                 <MudNumericField @bind-Value="_precioPorHora" Label="Precio por Hora (Bs)" Min="0.00m" Step="1.00m" Format="N2" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" Adornment="Adornment.Start" AdornmentText="Bs. " />
-                <MudNumericField @bind-Value="_minutosMinimo" Label="Cobro Mínimo (minutos)" Min="1" Max="180" Step="5" Required="true" Variant="Variant.Outlined" Style="max-width: 170px;" />
+                <MudNumericField @bind-Value="_minutosMinimo" Label="Cobro Mínimo (minutos)" Min="0" Max="180" Step="5" Required="true" Variant="Variant.Outlined" Style="max-width: 180px;" HelperText="0 para cobrar tiempo exacto sin piso mínimo" />
             </div>
 
             <div class="d-flex gap-3 align-center">
-                <MudNumericField @bind-Value="_minutosTolerancia" Label="Tolerancia de Gracia (minutos)" Min="0" Max="30" Step="1" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" HelperText="Minutos libres antes de facturar siguiente fracción" />
+                <MudNumericField @bind-Value="_minutosTolerancia" Label="Tolerancia de Gracia (minutos)" Min="0" Max="30" Step="1" Required="true" Variant="Variant.Outlined" Class="flex-grow-1" HelperText="Minutos libres antes de empezar a cobrar (0 para cobrar desde el minuto 1)" />
+            </div>
+
+            <!-- Minutos de Cortesía / Promo Gratuita -->
+            <div class="pa-3" style="background: rgba(212, 175, 55, 0.08); border-radius: 8px; border: 1px solid rgba(212, 175, 55, 0.3);">
+                <div class="d-flex justify-space-between align-center mb-1">
+                    <span style="font-weight: 700; color: var(--color-gold); font-size: 13px;">
+                        <i class="fa-solid fa-gift me-1"></i> Minutos de Cortesía / Promo Gratuita
+                    </span>
+                    <MudChip T="string" Color="Color.Tertiary" Size="Size.Small" Variant="Variant.Filled">
+                        @_minutosCortesia min
+                    </MudChip>
+                </div>
+                <MudNumericField @bind-Value="_minutosCortesia" Label="Minutos libres iniciales (Ej. 60 para Promo Cumpleañero)" Min="0" Max="300" Step="15" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Tiempo gratis al inicio de la sesión. Al vencer este margen, empieza el cobro normal." />
             </div>
 
             <div class="pa-3" style="background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-color);">
@@ -63,6 +76,7 @@
     private decimal _precioPorHora = 25.00m;
     private int _minutosMinimo = 15;
     private int _minutosTolerancia = 5;
+    private int _minutosCortesia = 0;
     private bool _activo = true;
     private bool _procesando;
 
@@ -75,6 +89,7 @@
             _precioPorHora = Tarifa.PrecioPorHora;
             _minutosMinimo = Tarifa.MinutosMinimo;
             _minutosTolerancia = Tarifa.MinutosTolerancia;
+            _minutosCortesia = Tarifa.MinutosCortesia;
             _activo = Tarifa.Activo;
         }
     }
@@ -103,6 +118,7 @@
         t.PrecioPorHora = _precioPorHora;
         t.MinutosMinimo = _minutosMinimo;
         t.MinutosTolerancia = _minutosTolerancia;
+        t.MinutosCortesia = _minutosCortesia;
         t.Activo = _activo;
 
         var exito = await Supabase.GuardarTarifaAsync(t);

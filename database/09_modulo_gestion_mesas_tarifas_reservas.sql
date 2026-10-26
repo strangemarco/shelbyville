@@ -58,21 +58,36 @@ RETURNS INT AS $$
 DECLARE
     v_reserva RECORD;
     v_liberadas INT := 0;
+    v_ahora_local TIMESTAMP;
 BEGIN
+    v_ahora_local := NOW() AT TIME ZONE 'America/La_Paz';
+
     FOR v_reserva IN 
         SELECT r.* FROM public.reservas_mesa r
         WHERE r.estado = 'activa'
-          AND (NOW() > r.fin_utc OR NOW() > (r.inicio_utc + (r.minutos_tolerancia_llegada || ' minutes')::INTERVAL))
+          AND (
+              v_ahora_local > (r.fecha + r.hora_fin)
+              OR 
+              v_ahora_local > (r.fecha + r.hora_inicio + (COALESCE(r.minutos_tolerancia_llegada, 15) || ' minutes')::INTERVAL)
+          )
     LOOP
         -- Marcar reserva como expirada
         UPDATE public.reservas_mesa 
         SET estado = 'expirada' 
         WHERE id = v_reserva.id;
 
-        -- Si la mesa seguía reservada, liberarla inmediatamente
-        UPDATE public.mesas 
-        SET estado = 'disponible', actualizado_en = NOW() 
-        WHERE id = v_reserva.mesa_id AND estado = 'reservada';
+        -- Si la mesa seguía reservada y no tiene otra reserva activa vigente para hoy, liberarla
+        IF NOT EXISTS (
+            SELECT 1 FROM public.reservas_mesa 
+            WHERE mesa_id = v_reserva.mesa_id 
+              AND estado = 'activa' 
+              AND id != v_reserva.id
+              AND v_ahora_local <= (fecha + hora_fin)
+        ) THEN
+            UPDATE public.mesas 
+            SET estado = 'disponible', actualizado_en = NOW() 
+            WHERE id = v_reserva.mesa_id AND estado = 'reservada';
+        END IF;
 
         v_liberadas := v_liberadas + 1;
     END LOOP;
@@ -89,8 +104,8 @@ CREATE OR REPLACE FUNCTION public.crear_reserva_mesa(
     p_fecha DATE,
     p_hora_inicio TIME,
     p_hora_fin TIME,
-    p_inicio_utc TIMESTAMPTZ,
-    p_fin_utc TIMESTAMPTZ,
+    p_inicio_utc TIMESTAMPTZ DEFAULT NULL,
+    p_fin_utc TIMESTAMPTZ DEFAULT NULL,
     p_tolerancia_minutos INT DEFAULT 15,
     p_notas TEXT DEFAULT NULL
 )
@@ -98,6 +113,8 @@ RETURNS JSONB AS $$
 DECLARE
     v_reserva_id UUID;
     v_mesa RECORD;
+    v_inicio_utc TIMESTAMPTZ;
+    v_fin_utc TIMESTAMPTZ;
 BEGIN
     SELECT * INTO v_mesa FROM public.mesas WHERE id = p_mesa_id FOR UPDATE;
     IF NOT FOUND THEN
@@ -108,12 +125,16 @@ BEGIN
         RAISE EXCEPTION 'La mesa % no está disponible para reservar (Estado actual: %).', v_mesa.numero, v_mesa.estado;
     END IF;
 
+    -- Calcular los timestamps UTC reales a partir de fecha + hora en zona 'America/La_Paz'
+    v_inicio_utc := (p_fecha + p_hora_inicio) AT TIME ZONE 'America/La_Paz';
+    v_fin_utc := (p_fecha + p_hora_fin) AT TIME ZONE 'America/La_Paz';
+
     INSERT INTO public.reservas_mesa (
         mesa_id, cliente_nombre, telefono, fecha, hora_inicio, hora_fin,
         inicio_utc, fin_utc, minutos_tolerancia_llegada, estado, notas
     ) VALUES (
         p_mesa_id, p_cliente_nombre, p_telefono, p_fecha, p_hora_inicio, p_hora_fin,
-        p_inicio_utc, p_fin_utc, COALESCE(p_tolerancia_minutos, 15), 'activa', p_notas
+        v_inicio_utc, v_fin_utc, COALESCE(p_tolerancia_minutos, 15), 'activa', p_notas
     ) RETURNING id INTO v_reserva_id;
 
     -- Poner la mesa en estado 'reservada'

@@ -21,6 +21,14 @@
                     <span style="font-weight: 600;">Bs. @Mesa.MontoTiempoCalculado.ToString("N2")</span>
                 </div>
 
+                @if (Mesa.Tarifa?.MinutosCortesia > 0)
+                {
+                    <div class="d-flex justify-space-between mb-2" style="font-size: 12px; color: var(--color-gold);">
+                        <span><i class="fa-solid fa-gift me-1"></i> Cortesía (@Mesa.Tarifa.Nombre):</span>
+                        <span style="font-weight: 700;">@Mesa.Tarifa.MinutosCortesia min gratis aplicados</span>
+                    </div>
+                }
+
                 @if (_consumos.Any())
                 {
                     <MudDivider Class="my-2" />

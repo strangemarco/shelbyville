@@ -1,5 +1,6 @@
 @page "/caja"
 @inject SupabaseService Supabase
+@inject ExcelExportService ExcelService
 @inject ISnackbar Snackbar
 
 <div class="d-flex flex-column gap-5">
@@ -12,9 +13,6 @@
             <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
                 Apertura con fondo inicial, control de ingresos en efectivo/QR y arqueo de cierre.
             </p>
-        </div>
-        <div>
-            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarEstadoCajaAsync" Title="Actualizar datos" />
         </div>
     </div>
 
@@ -42,7 +40,18 @@
                 </div>
 
                 <div class="d-flex flex-column gap-4">
-                    <MudTextField @bind-Value="_nombreCajaApertura" Label="Nombre o Identificador de Caja" Variant="Variant.Outlined" />
+                    <MudSelect T="string" 
+                               @bind-Value="_nombreCajaApertura" 
+                               Label="Punto de Caja y Turno" 
+                               Variant="Variant.Outlined" 
+                               AnchorOrigin="Origin.BottomCenter"
+                               AdornmentIcon="@Icons.Material.Filled.PointOfSale"
+                               Adornment="Adornment.Start">
+                        @foreach (var opcion in _opcionesTurnoCaja)
+                        {
+                            <MudSelectItem Value="@opcion">@opcion</MudSelectItem>
+                        }
+                    </MudSelect>
                     <MudNumericField T="decimal" @bind-Value="_montoInicialApertura" Label="Fondo Inicial en Efectivo (Bs.)" Format="N2" Min="0" Variant="Variant.Outlined" />
 
                     <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="btn-touch mt-2" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="AbrirCajaAsync" Disabled="_procesando">
@@ -184,15 +193,175 @@
                 </div>
             </MudItem>
         </MudGrid>
-    }
+
+        <!-- Historial de Turnos y Arqueos Cerrados -->
+        <div class="shelby-card pa-5 mt-4" style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px;">
+        <div class="d-flex flex-column flex-md-row justify-space-between align-start align-md-center gap-3 pb-3 mb-3" style="border-bottom: 1px solid var(--border-color);">
+            <div>
+                <div class="d-flex align-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-gold" style="font-size: 1.25rem;"></i>
+                    <h2 class="font-heading ma-0" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                        HISTORIAL DE TURNOS Y ARQUEOS CERRADOS
+                    </h2>
+                </div>
+                <p class="ma-0 mt-1" style="font-size: 13px; color: var(--text-secondary);">
+                    Consulta los turnos finalizados, diferencias de arqueo y notas u observaciones registradas por el personal.
+                </p>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-center">
+                <MudTextField @bind-Value="_busquedaHistorial" 
+                              Placeholder="Buscar por turno, nota o cajero..." 
+                              Immediate="true" 
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Search" 
+                              Clearable="true" 
+                              Style="min-width: 260px;" />
+
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Tertiary" 
+                           StartIcon="@Icons.Custom.FileFormats.FileExcel" 
+                           Class="btn-touch" 
+                           Style="border-color: rgba(34, 197, 94, 0.5); color: #4ADE80; background: rgba(34, 197, 94, 0.08); font-weight: 600;"
+                           OnClick="ExportarAExcelAsync" 
+                           Disabled="_exportando || !HistorialFiltrado.Any()">
+                    @if (_exportando)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Exportando...</span>
+                    }
+                    else
+                    {
+                        <span>Exportar Excel</span>
+                    }
+                </MudButton>
+            </div>
+        </div>
+
+        @if (!HistorialFiltrado.Any())
+        {
+            <div class="pa-8 text-center" style="color: var(--text-muted);">
+                <i class="fa-solid fa-cash-register fa-2x mb-2" style="opacity: 0.3;"></i>
+                <p class="ma-0" style="font-size: 13px;">No hay registros de turnos de caja cerrados todavía.</p>
+            </div>
+        }
+        else
+        {
+            <MudTable Items="@HistorialFiltrado" 
+                      Dense="true" 
+                      Hover="true" 
+                      Elevation="0" 
+                      Class="custom-table"
+                      RowsPerPage="10">
+                <HeaderContent>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">TURNO / HORARIO</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">FONDO INICIAL</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">VENTAS EFECTIVO</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">VENTAS QR</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">ARQUEO (ESPERADO VS REAL)</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">DIFERENCIA</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">RESPONSABLE CIERRE</MudTh>
+                    <MudTh Style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">OBSERVACIONES / NOTAS</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Turno">
+                        <div style="font-weight: 600; color: var(--text-primary); font-size: 13px;">@context.Nombre</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">
+                            @context.HoraApertura.ToLocalTime().ToString("dd/MM/yyyy HH:mm") → @(context.HoraCierre?.ToLocalTime().ToString("HH:mm") ?? "-")
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Fondo Inicial" Class="tabular-nums font-heading" style="font-size: 13px;">
+                        Bs. @context.MontoInicial.ToString("N2")
+                    </MudTd>
+                    <MudTd DataLabel="Ventas Efectivo" Class="tabular-nums font-heading text-gold" style="font-weight: 600; font-size: 13px;">
+                        Bs. @context.MontoVentasEfectivo.ToString("N2")
+                    </MudTd>
+                    <MudTd DataLabel="Ventas QR" Class="tabular-nums font-heading" style="font-size: 13px; color: var(--status-reservada);">
+                        Bs. @context.MontoVentasQr.ToString("N2")
+                    </MudTd>
+                    <MudTd DataLabel="Arqueo">
+                        <div style="font-size: 12px;">
+                            <span style="color: var(--text-secondary);">Esp:</span> <b>Bs. @context.MontoEsperadoEfectivo.ToString("N2")</b>
+                        </div>
+                        <div style="font-size: 12px;">
+                            <span style="color: var(--text-secondary);">Real:</span> <b>Bs. @((context.MontoRealEfectivo ?? 0).ToString("N2"))</b>
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Diferencia">
+                        @{
+                            var dif = context.Diferencia ?? 0;
+                        }
+                        @if (dif == 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Style="font-size: 11px; font-weight: 700;">
+                                Exacto
+                            </MudChip>
+                        }
+                        else if (dif > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled" Style="font-size: 11px; font-weight: 700;">
+                                +Bs. @dif.ToString("N2") (Sobrante)
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Style="font-size: 11px; font-weight: 700;">
+                                Bs. @dif.ToString("N2") (Faltante)
+                            </MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Responsable">
+                        <div class="d-flex align-center gap-1" style="font-size: 12.5px; color: var(--text-primary);">
+                            <i class="fa-solid fa-user-check text-gold" style="font-size: 11px;"></i>
+                            <span>@ObtenerNombreUsuario(context.UsuarioCierreId)</span>
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Observaciones">
+                        @if (!string.IsNullOrWhiteSpace(context.Observaciones))
+                        {
+                            <div class="pa-2" style="background: rgba(212, 175, 55, 0.08); border-left: 3px solid var(--color-gold); border-radius: 4px; font-size: 12px; color: var(--text-primary); max-width: 280px; word-break: break-word;">
+                                <i class="fa-solid fa-comment-dots text-gold mr-1"></i>
+                                <span>@context.Observaciones</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <span style="color: var(--text-muted); font-size: 12px; font-style: italic;">Sin notas</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[]{5, 10, 25}" InfoFormat="{first_item}-{last_item} de {all_items}" RowsPerPageString="Turnos por pág:" />
+                </PagerContent>
+            </MudTable>
+        }
+    </div>
+}
 </div>
 
 @code {
     private CajaModel? _cajaAbierta;
+    private List<CajaModel> _historialCajas = new();
+    private List<PerfilModel> _perfiles = new();
+    private string _busquedaHistorial = string.Empty;
+
     private bool _cargando = true;
     private bool _procesando;
 
     // Campos de apertura
+    private readonly List<string> _opcionesTurnoCaja = new()
+    {
+        "Caja Principal - Turno Tarde",
+        "Caja Principal - Turno Noche",
+        "Caja Principal - Turno Madrugada",
+        "Caja Principal - Turno Mañana",
+        "Caja Principal - Turno Continuo",
+        "Caja Barra - Turno Tarde",
+        "Caja Barra - Turno Noche",
+        "Caja Terraza - Turno Noche"
+    };
     private string _nombreCajaApertura = "Caja Principal - Turno Tarde";
     private decimal _montoInicialApertura = 100.00m;
 
@@ -203,6 +372,14 @@
     private decimal EfectivoEsperado => (_cajaAbierta?.MontoInicial ?? 0) + (_cajaAbierta?.MontoVentasEfectivo ?? 0) + (_cajaAbierta?.MontoIngresosExtra ?? 0) - (_cajaAbierta?.MontoEgresos ?? 0);
     private decimal DiferenciaArqueo => _montoRealContado - EfectivoEsperado;
 
+    private IEnumerable<CajaModel> HistorialFiltrado =>
+        string.IsNullOrWhiteSpace(_busquedaHistorial)
+            ? _historialCajas
+            : _historialCajas.Where(c => 
+                (c.Nombre != null && c.Nombre.Contains(_busquedaHistorial, StringComparison.OrdinalIgnoreCase)) ||
+                (c.Observaciones != null && c.Observaciones.Contains(_busquedaHistorial, StringComparison.OrdinalIgnoreCase)) ||
+                ObtenerNombreUsuario(c.UsuarioCierreId).Contains(_busquedaHistorial, StringComparison.OrdinalIgnoreCase));
+
     protected override async Task OnInitializedAsync()
     {
         await CargarEstadoCajaAsync();
@@ -212,11 +389,33 @@
     {
         _cargando = true;
         _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
+        _historialCajas = await Supabase.GetHistorialCajasAsync();
+
+        try
+        {
+            _perfiles = await Supabase.GetPerfilesAsync();
+        }
+        catch { }
+
         if (_cajaAbierta != null)
         {
             _montoRealContado = EfectivoEsperado;
         }
         _cargando = false;
+    }
+
+    private string ObtenerNombreUsuario(string? usuarioId)
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId)) return "Cajero";
+        if (Guid.TryParse(usuarioId, out var uid))
+        {
+            var p = _perfiles.FirstOrDefault(x => x.Id == uid);
+            if (p != null && !string.IsNullOrWhiteSpace(p.NombreCompleto))
+            {
+                return p.NombreCompleto;
+            }
+        }
+        return "Cajero";
     }
 
     private async Task AbrirCajaAsync()
@@ -247,11 +446,39 @@
         if (exito)
         {
             Snackbar.Add("Caja cerrada y arqueada exitosamente", Severity.Success);
+            _observacionesCierre = null;
             await CargarEstadoCajaAsync();
         }
         else
         {
             Snackbar.Add("Error al cerrar caja", Severity.Error);
+        }
+    }
+
+    private bool _exportando;
+
+    private async Task ExportarAExcelAsync()
+    {
+        var lista = HistorialFiltrado.ToList();
+        if (lista.Count == 0)
+        {
+            Snackbar.Add("No hay registros de turnos de caja para exportar.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _exportando = true;
+            await ExcelService.ExportarHistorialCajasAsync(lista, _perfiles);
+            Snackbar.Add("Historial de turnos y arqueos exportado a Excel exitosamente.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al exportar a Excel: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exportando = false;
         }
     }
 }
