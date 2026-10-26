@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 set -e
 
 echo "=== 1. Instalando SDK de .NET 10.0 ==="
