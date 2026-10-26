@@ -1,5 +1,6 @@
 @page "/movimientos"
 @inject SupabaseService Supabase
+@inject ExcelExportService ExcelService
 @inject ISnackbar Snackbar
 
 <div class="d-flex flex-column gap-5">
@@ -13,7 +14,24 @@
                 Auditoría y trazabilidad en vivo de todas las operaciones: mesas, cobros, caja e inventario.
             </p>
         </div>
-        <div class="d-flex gap-2 align-center">
+        <div class="d-flex flex-wrap gap-2 align-center">
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Tertiary" 
+                       StartIcon="@Icons.Custom.FileFormats.FileExcel" 
+                       Class="btn-touch" 
+                       Style="border-color: rgba(34, 197, 94, 0.5); color: #4ADE80; background: rgba(34, 197, 94, 0.08); font-weight: 600;"
+                       OnClick="ExportarAExcelAsync" 
+                       Disabled="_exportando">
+                @if (_exportando)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Exportando...</span>
+                }
+                else
+                {
+                    <span>Exportar Excel</span>
+                }
+            </MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarMovimientosAsync">
                 Actualizar
             </MudButton>
@@ -253,5 +271,32 @@
             "consumos" => ("rgba(212, 175, 55, 0.15)", "#D4AF37", Icons.Material.Filled.LocalBar),
             _ => ("rgba(107, 114, 128, 0.15)", "#9CA3AF", Icons.Material.Filled.History)
         };
+    }
+
+    private bool _exportando;
+
+    private async Task ExportarAExcelAsync()
+    {
+        var lista = MovimientosFiltrados.ToList();
+        if (lista.Count == 0)
+        {
+            Snackbar.Add("No hay movimientos para exportar con el filtro actual.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _exportando = true;
+            await ExcelService.ExportarMovimientosAsync(lista, _moduloFiltro);
+            Snackbar.Add("Movimientos exportados a Excel exitosamente.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al exportar a Excel: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exportando = false;
+        }
     }
 }

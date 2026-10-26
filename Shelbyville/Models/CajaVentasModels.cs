@@ -130,6 +130,32 @@ public class VentaModel : BaseModel
 
     [Column("creado_en")]
     public DateTime CreadoEn { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<PagoModel> Pagos { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<DetalleVentaModel> Detalles { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string MetodoPagoPrincipal
+    {
+        get
+        {
+            if (Pagos == null || Pagos.Count == 0) return "Efectivo";
+            if (Pagos.Count == 1)
+            {
+                return Pagos[0].MetodoPago switch
+                {
+                    "efectivo" => "Efectivo",
+                    "qr" => "QR",
+                    "tarjeta" => "Tarjeta",
+                    _ => Pagos[0].MetodoPago
+                };
+            }
+            return "Mixto (" + string.Join(" + ", Pagos.Select(p => p.MetodoPago.ToUpperInvariant())) + ")";
+        }
+    }
 }
 
 [Table("detalles_venta")]

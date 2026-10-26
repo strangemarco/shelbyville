@@ -4,52 +4,69 @@
 @inject ISnackbar Snackbar
 @implements IDisposable
 
-<MudLayout>
-    <!-- Top AppBar (Debe ir primero para calcular el offset de MudLayout y ClipMode) -->
-    <MudAppBar Fixed="true" Elevation="1" Style="background-color: var(--bg-sidebar); border-bottom: 1px solid var(--border-color); backdrop-filter: blur(8px); z-index: 1201;">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
-        
-        <div class="d-flex align-center ml-2 cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/"))">
-            <img src="images/LogoShelbyville.png" alt="Shelbyville Billar" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7));" />
+@if (_verificandoSesion)
+{
+    <!-- Pantalla de transición elegante mientras se verifica la sesión guardada -->
+    <div class="d-flex flex-column align-center justify-center" style="min-height: 100vh; background: radial-gradient(circle at 50% 20%, #164F3B 0%, #0B1210 65%, #050807 100%);">
+        <img src="images/LogoShelbyville.png" alt="Shelbyville Billar" style="max-width: 220px; width: 100%; height: auto; object-fit: contain; filter: drop-shadow(0 8px 24px rgba(0,0,0,0.85));" class="mb-4" />
+        <MudProgressCircular Color="Color.Tertiary" Indeterminate="true" Size="Size.Medium" Class="mb-3" />
+        <div style="color: var(--color-gold); font-size: 13px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;">
+            Verificando sesión...
         </div>
+    </div>
+}
+else if (!_autenticado)
+{
+    <!-- Contenedor neutro mientras se completa la redirección hacia el Login -->
+    <div style="min-height: 100vh; background: radial-gradient(circle at 50% 20%, #164F3B 0%, #0B1210 65%, #050807 100%);"></div>
+}
+else
+{
+    <MudLayout>
+        <!-- Top AppBar (Debe ir primero para calcular el offset de MudLayout y ClipMode) -->
+        <MudAppBar Fixed="true" Elevation="1" Style="background-color: var(--bg-sidebar); border-bottom: 1px solid var(--border-color); backdrop-filter: blur(8px); z-index: 1201;">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+            
+            <div class="d-flex align-center ml-2 cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/"))">
+                <img src="images/LogoShelbyville.png" alt="Shelbyville Billar" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7));" />
+            </div>
 
-        <MudSpacer />
+            <MudSpacer />
 
-        <!-- Reloj en tiempo real -->
-        <div class="d-none d-md-flex align-center px-4 py-1 mr-3 tabular-nums" style="background: rgba(28, 41, 35, 0.6); border: 1px solid var(--border-color); border-radius: 8px;">
-            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Style="color: var(--color-gold); margin-right: 8px;" />
-            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">
-                @_horaActual
-            </span>
-        </div>
+            <!-- Reloj en tiempo real -->
+            <div class="d-none d-md-flex align-center px-4 py-1 mr-3 tabular-nums" style="background: rgba(28, 41, 35, 0.6); border: 1px solid var(--border-color); border-radius: 8px;">
+                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Style="color: var(--color-gold); margin-right: 8px;" />
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">
+                    @_horaActual
+                </span>
+            </div>
 
-        <!-- Indicador de Caja -->
-        <div>
+            <!-- Indicador de Caja: Solo se muestra si la caja está abierta -->
             @if (_cajaAbierta != null)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">
+                <MudChip T="string" 
+                         Size="Size.Small" 
+                         Color="Color.Success" 
+                         Variant="Variant.Filled" 
+                         Icon="@Icons.Material.Filled.CheckCircle" 
+                         OnClick="@(() => Navigation.NavigateTo("/caja"))"
+                         Style="cursor: pointer;">
                     Caja Abierta: @(_cajaAbierta.Nombre)
                 </MudChip>
             }
-            else
-            {
-                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Lock">
-                    Caja Cerrada
-                </MudChip>
-            }
-        </div>
-    </MudAppBar>
+        </MudAppBar>
 
-    <!-- Drawer / Sidebar -->
-    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="DrawerVariant.Responsive" Width="260px" Style="background-color: var(--bg-sidebar);">
-        <NavMenu />
-    </MudDrawer>
+        <!-- Drawer / Sidebar -->
+        <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="DrawerVariant.Responsive" Width="260px" Style="background-color: var(--bg-sidebar);">
+            <NavMenu />
+        </MudDrawer>
 
-    <!-- Main Content con padding-top para no colisionar con AppBar -->
-    <MudMainContent Class="pt-20 px-4 px-md-6 pb-6" Style="background-color: var(--bg-main); min-height: 100vh;">
-        @Body
-    </MudMainContent>
-</MudLayout>
+        <!-- Main Content con padding-top para no colisionar con AppBar -->
+        <MudMainContent Class="pt-20 px-4 px-md-6 pb-6" Style="background-color: var(--bg-main); min-height: 100vh;">
+            @Body
+        </MudMainContent>
+    </MudLayout>
+}
 
 @code {
     private bool _drawerOpen = true;
@@ -57,6 +74,8 @@
     private System.Threading.Timer? _relojTimer;
     private CajaModel? _cajaAbierta;
     private PerfilModel? _perfil;
+    private bool _verificandoSesion = true;
+    private bool _autenticado = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,19 +86,128 @@
         }, null, 1000, 1000);
 
         Supabase.OnAuthStateChange += OnAuthChanged;
+        Supabase.OnCajaUpdated += OnCajaChanged;
+        Navigation.LocationChanged += OnLocationChanged;
 
-        // Restaurar sesión persistida si se refrescó la página
-        await Supabase.RestaurarSesionAsync();
+        await VerificarAutenticacionAsync();
+    }
 
-        await CargarEstadoAsync();
+    private async Task VerificarAutenticacionAsync()
+    {
+        _verificandoSesion = true;
+
+        try
+        {
+            // Restaurar sesión persistida si se refrescó la página o se acaba de abrir el sistema
+            await Supabase.RestaurarSesionAsync();
+
+            if (!Supabase.EstaAutenticado)
+            {
+                RedirigirALogin();
+                return;
+            }
+
+            // Validar perfil y que la cuenta siga activa
+            _perfil = await Supabase.GetPerfilUsuarioAsync();
+            if (_perfil != null && !_perfil.Activo)
+            {
+                await Supabase.SignOutAsync();
+                RedirigirALogin();
+                return;
+            }
+
+            _autenticado = true;
+            _verificandoSesion = false;
+            await CargarEstadoAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error verificando autenticación en MainLayout: {ex.Message}");
+            RedirigirALogin();
+        }
+        finally
+        {
+            _verificandoSesion = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RedirigirALogin()
+    {
+        _autenticado = false;
+        _verificandoSesion = false;
+
+        var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (string.IsNullOrWhiteSpace(relativePath) || relativePath.StartsWith("login", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/login", replace: true);
+        }
+        else
+        {
+            var returnUrl = Uri.EscapeDataString("/" + relativePath);
+            Navigation.NavigateTo($"/login?returnUrl={returnUrl}", replace: true);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (!_verificandoSesion && !_autenticado)
+        {
+            var relativePath = Navigation.ToBaseRelativePath(e.Location);
+            if (!relativePath.StartsWith("login", StringComparison.OrdinalIgnoreCase))
+            {
+                RedirigirALogin();
+            }
+        }
+        else if (_autenticado)
+        {
+            // Refrescar estado de caja al navegar entre pantallas
+            _ = InvokeAsync(async () =>
+            {
+                await RefrescarCajaAsync();
+                StateHasChanged();
+            });
+        }
     }
 
     private void OnAuthChanged()
     {
         _ = InvokeAsync(async () =>
         {
-            await CargarEstadoAsync();
+            if (!Supabase.EstaAutenticado)
+            {
+                _autenticado = false;
+                _perfil = null;
+                RedirigirALogin();
+            }
+            else
+            {
+                _autenticado = true;
+                await CargarEstadoAsync();
+            }
+            StateHasChanged();
         });
+    }
+
+    private void OnCajaChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await RefrescarCajaAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefrescarCajaAsync()
+    {
+        try
+        {
+            _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error actualizando estado caja layout: {ex.Message}");
+        }
     }
 
     private async Task CargarEstadoAsync()
@@ -87,7 +215,10 @@
         try
         {
             _cajaAbierta = await Supabase.GetCajaAbiertaAsync();
-            _perfil = await Supabase.GetPerfilUsuarioAsync();
+            if (_perfil == null)
+            {
+                _perfil = await Supabase.GetPerfilUsuarioAsync();
+            }
             StateHasChanged();
         }
         catch (Exception ex)
@@ -100,21 +231,16 @@
     {
         await Supabase.SignOutAsync();
         _perfil = null;
+        _autenticado = false;
         Snackbar.Add("Sesión finalizada", Severity.Info);
-        Navigation.NavigateTo("/login");
-    }
-
-    private string ObtenerIniciales(string? nombre)
-    {
-        if (string.IsNullOrWhiteSpace(nombre)) return "U";
-        var partes = nombre.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (partes.Length == 1) return partes[0].Substring(0, Math.Min(2, partes[0].Length)).ToUpperInvariant();
-        return $"{partes[0][0]}{partes[1][0]}".ToUpperInvariant();
+        Navigation.NavigateTo("/login", replace: true);
     }
 
     public void Dispose()
     {
         _relojTimer?.Dispose();
         Supabase.OnAuthStateChange -= OnAuthChanged;
+        Supabase.OnCajaUpdated -= OnCajaChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 }

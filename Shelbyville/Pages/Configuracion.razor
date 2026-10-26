@@ -1,6 +1,5 @@
 @page "/configuracion"
 @inject SupabaseService Supabase
-@inject IConfiguration Config
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -13,7 +12,7 @@
                 CONFIGURACIÓN DEL SISTEMA
             </h1>
             <p class="ma-0 mt-1" style="color: var(--text-secondary); font-size: 14px;">
-                Gestión interactiva de mesas, tarifas por hora, reservas con auto-liberación y conexión con Supabase.
+                Gestión interactiva de mesas, tarifas por hora y reservas con auto-liberación.
             </p>
         </div>
 
@@ -430,91 +429,6 @@
                         </MudTable>
                     </div>
                 </div>
-            </MudTabPanel>
-
-            <!-- PESTAÑA 4: SERVIDOR SUPABASE -->
-            <MudTabPanel Text="Servidor y Base de Datos" Icon="@Icons.Material.Filled.CloudDone">
-                <MudGrid Spacing="3">
-                    <MudItem xs="12" md="6">
-                        <div class="shelby-card pa-5 d-flex flex-column gap-3" style="background: var(--bg-surface); border: 1px solid var(--border-color);">
-                            <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
-                                <MudIcon Icon="@Icons.Material.Filled.CloudDone" Color="Color.Success" />
-                                <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
-                                    Estado de Conexión
-                                </span>
-                            </div>
-
-                            <div class="d-flex flex-column gap-2" style="font-size: 13px;">
-                                <div class="d-flex justify-space-between">
-                                    <span style="color: var(--text-secondary);">Enlace Supabase:</span>
-                                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Conectado y Operativo</MudChip>
-                                </div>
-                                <div class="d-flex justify-space-between">
-                                    <span style="color: var(--text-secondary);">URL del Proyecto:</span>
-                                    <span style="font-family: monospace; color: var(--color-gold);">@(Config["Supabase:Url"])</span>
-                                </div>
-                                <div class="d-flex justify-space-between">
-                                    <span style="color: var(--text-secondary);">Motor de Base de Datos:</span>
-                                    <span style="font-weight: 600;">PostgreSQL + Realtime</span>
-                                </div>
-                                <div class="d-flex justify-space-between">
-                                    <span style="color: var(--text-secondary);">Lógica Transaccional:</span>
-                                    <span style="font-weight: 600;">PostgreSQL RPC / Functions</span>
-                                </div>
-                            </div>
-                        </div>
-                    </MudItem>
-
-                    <MudItem xs="12" md="6">
-                        <div class="shelby-card pa-5 d-flex flex-column gap-3" style="background: var(--bg-surface); border: 1px solid var(--border-color);">
-                            <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
-                                <MudIcon Icon="@Icons.Material.Filled.Terminal" Color="Color.Tertiary" />
-                                <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
-                                    Script de Base de Datos (Módulo de Mesas y Reservas)
-                                </span>
-                            </div>
-
-                            <div style="font-size: 13px; color: var(--text-secondary);">
-                                Para activar la tabla de reservas en Supabase y los procedimientos almacenados correspondientes, se ha generado el script:
-                            </div>
-
-                            <div class="pa-2 font-mono" style="background: var(--bg-elevated); border-radius: 6px; font-size: 12px; color: var(--color-gold);">
-                                database/09_modulo_gestion_mesas_tarifas_reservas.sql
-                            </div>
-
-                            <div style="font-size: 12px; color: var(--text-secondary);">
-                                ✓ Permite estado <code>'reservada'</code> en <code>mesas</code><br />
-                                ✓ Crea la tabla <code>reservas_mesa</code> con RLS y Realtime<br />
-                                ✓ Funciones RPC: <code>crear_reserva_mesa</code>, <code>verificar_y_liberar_reservas_expiradas</code>
-                            </div>
-                        </div>
-                    </MudItem>
-
-                    <MudItem xs="12">
-                        <div class="shelby-card pa-5 d-flex flex-column gap-3" style="background: var(--bg-surface); border: 1px solid var(--border-color);">
-                            <div class="d-flex align-center gap-2 pb-2" style="border-bottom: 1px solid var(--border-color);">
-                                <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Tertiary" />
-                                <span class="font-heading" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
-                                    Script de Base de Datos (Módulo de Personal, Usuarios y Roles)
-                                </span>
-                            </div>
-
-                            <div style="font-size: 13px; color: var(--text-secondary);">
-                                Para activar la creación administrativa de empleados, sincronización de correo y reseteo de contraseñas:
-                            </div>
-
-                            <div class="pa-2 font-mono" style="background: var(--bg-elevated); border-radius: 6px; font-size: 12px; color: var(--color-gold);">
-                                database/10_modulo_usuarios_y_roles.sql
-                            </div>
-
-                            <div style="font-size: 12px; color: var(--text-secondary);">
-                                ✓ Catálogo completo de roles (Administrador, Supervisor, Cajero, Mesero, Bartender)<br />
-                                ✓ Columna <code>email</code> y sincronización bidireccional en <code>perfiles</code><br />
-                                ✓ Funciones RPC administrativas: <code>admin_crear_usuario</code>, <code>admin_actualizar_perfil</code>, <code>admin_cambiar_password</code>, <code>admin_alternar_activo</code>
-                            </div>
-                        </div>
-                    </MudItem>
-                </MudGrid>
             </MudTabPanel>
 
         </MudTabs>

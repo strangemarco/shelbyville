@@ -43,6 +43,31 @@
     <!-- MudBlazor JS -->
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
+
+    <!-- Script de Descarga de Archivos Excel Oficiales -->
+    <script>
+        window.shelbyvilleDescargarExcel = function (nombreArchivo, base64Datos) {
+            try {
+                const bytesTexto = atob(base64Datos);
+                const numerosBytes = new Array(bytesTexto.length);
+                for (let i = 0; i < bytesTexto.length; i++) {
+                    numerosBytes[i] = bytesTexto.charCodeAt(i);
+                }
+                const arregloBytes = new Uint8Array(numerosBytes);
+                const blob = new Blob([arregloBytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                const enlace = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                enlace.href = url;
+                enlace.download = nombreArchivo;
+                document.body.appendChild(enlace);
+                enlace.click();
+                document.body.removeChild(enlace);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error("Error al descargar archivo Excel:", err);
+            }
+        };
+    </script>
 </body>
 
 </html>

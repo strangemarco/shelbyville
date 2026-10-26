@@ -2,6 +2,7 @@
 @inject SupabaseService Supabase
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ExcelExportService ExcelService
 
 <div class="d-flex flex-column gap-4">
     <!-- Header -->
@@ -15,6 +16,23 @@
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Tertiary" 
+                       StartIcon="@Icons.Custom.FileFormats.FileExcel" 
+                       Class="btn-touch" 
+                       Style="border-color: rgba(34, 197, 94, 0.5); color: #4ADE80; background: rgba(34, 197, 94, 0.08); font-weight: 600;"
+                       OnClick="ExportarAExcelAsync" 
+                       Disabled="_exportando">
+                @if (_exportando)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Exportando...</span>
+                }
+                else
+                {
+                    <span>Exportar Excel</span>
+                }
+            </MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.AddShoppingCart" Class="btn-touch" OnClick="AbrirModalEntradaStockGlobal">
                 + Entrada de Mercadería
             </MudButton>
@@ -152,6 +170,32 @@
         if (result != null && !result.Canceled)
         {
             await CargarInventarioAsync();
+        }
+    }
+
+    private bool _exportando;
+
+    private async Task ExportarAExcelAsync()
+    {
+        if (_productos == null || _productos.Count == 0)
+        {
+            Snackbar.Add("No hay artículos en el inventario para exportar.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _exportando = true;
+            await ExcelService.ExportarInventarioAsync(_productos, _categorias);
+            Snackbar.Add("Inventario exportado a Excel exitosamente.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al exportar a Excel: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exportando = false;
         }
     }
 }

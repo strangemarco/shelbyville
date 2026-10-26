@@ -137,7 +137,7 @@
     {
         await Supabase.SignOutAsync();
         Snackbar.Add("Sesión finalizada", Severity.Info);
-        Navigation.NavigateTo("/login");
+        Navigation.NavigateTo("/login", replace: true);
     }
 
     public void Dispose()

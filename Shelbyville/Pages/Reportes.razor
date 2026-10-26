@@ -1,9 +1,11 @@
 @page "/reportes"
 @inject SupabaseService Supabase
+@inject ExcelExportService ExcelService
+@inject ISnackbar Snackbar
 
 <div class="d-flex flex-column gap-5">
     <!-- Header -->
-    <div class="d-flex justify-space-between align-center">
+    <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3">
         <div>
             <h1 class="font-heading ma-0" style="font-size: 28px; font-weight: 800; color: var(--color-gold);">
                 ESTADÍSTICAS Y REPORTES
@@ -12,7 +14,26 @@
                 Métricas de facturación, desglose por métodos de pago y rendimiento del salón.
             </p>
         </div>
-        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarReportesAsync" />
+        <div class="d-flex flex-wrap gap-2 align-center">
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Tertiary" 
+                       StartIcon="@Icons.Custom.FileFormats.FileExcel" 
+                       Class="btn-touch" 
+                       Style="border-color: rgba(34, 197, 94, 0.5); color: #4ADE80; background: rgba(34, 197, 94, 0.08); font-weight: 600;"
+                       OnClick="ExportarReporteAExcelAsync" 
+                       Disabled="_exportando">
+                @if (_exportando)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Exportando...</span>
+                }
+                else
+                {
+                    <span>Exportar a Excel</span>
+                }
+            </MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="CargarReportesAsync" />
+        </div>
     </div>
 
     <!-- Tarjetas de Resumen Financiero -->
@@ -113,11 +134,260 @@
             </div>
         </MudItem>
     </MudGrid>
+
+    <!-- Tabla: Últimas 10 Ventas Realizadas -->
+    <div class="shelby-card pa-5" style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px;">
+        <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center gap-3 pb-3 mb-3" style="border-bottom: 1px solid var(--border-color);">
+            <div class="d-flex align-center gap-3">
+                <div class="pa-2 d-flex align-center justify-center" style="background: rgba(212, 175, 55, 0.15); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px;">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Tertiary" />
+                </div>
+                <div>
+                    <h2 class="font-heading ma-0" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+                        ÚLTIMAS 10 VENTAS REGISTRADAS
+                    </h2>
+                    <span style="font-size: 13px; color: var(--text-secondary);">
+                        Facturación reciente de mesas de billar y punto de venta con detalle de cobro y métodos de pago.
+                    </span>
+                </div>
+            </div>
+
+            <div class="d-flex align-center gap-2">
+                <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.History">
+                    @_ultimasVentas.Count ventas
+                </MudChip>
+            </div>
+        </div>
+
+        @if (_cargando)
+        {
+            <div class="d-flex justify-center align-center py-8">
+                <MudProgressCircular Color="Color.Tertiary" Indeterminate="true" Size="Size.Medium" />
+            </div>
+        }
+        else if (_ultimasVentas.Count == 0)
+        {
+            <div class="d-flex flex-column align-center justify-center py-10 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Large" Style="color: var(--text-muted); font-size: 48px;" Class="mb-2" />
+                <div style="font-size: 15px; font-weight: 600; color: var(--text-secondary);">
+                    No hay ventas registradas todavía
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                    Las liquidaciones de mesas y ventas directas aparecerán aquí cronológicamente.
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x: auto;">
+                <MudTable Items="_ultimasVentas" Dense="true" Hover="true" Elevation="0" Class="shelby-table" Style="background: transparent;">
+                    <HeaderContent>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700; width: 40px;"></MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700;">Fecha y Hora</MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700;">Tipo de Operación</MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700;">Cliente</MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700;">Desglose</MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700;">Método de Pago</MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700; text-align: right;">Total Cobrado</MudTh>
+                        <MudTh Style="color: var(--color-gold); font-weight: 700; text-align: center;">Estado</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            <MudIconButton Icon="@(_filasExpandidas.Contains(context.Id) ? Icons.Material.Filled.KeyboardArrowUp : Icons.Material.Filled.KeyboardArrowDown)"
+                                           Size="Size.Small"
+                                           Color="Color.Tertiary"
+                                           OnClick="@(() => ToggleExpandir(context.Id))" />
+                        </MudTd>
+
+                        <MudTd DataLabel="Fecha y Hora">
+                            <div class="d-flex flex-column">
+                                <span class="tabular-nums" style="font-weight: 600; color: var(--text-primary); font-size: 13px;">
+                                    @context.CreadoEn.ToLocalTime().ToString("dd/MM/yyyy")
+                                </span>
+                                <span class="tabular-nums" style="font-size: 11px; color: var(--text-secondary);">
+                                    @context.CreadoEn.ToLocalTime().ToString("HH:mm:ss")
+                                </span>
+                            </div>
+                        </MudTd>
+
+                        <MudTd DataLabel="Tipo">
+                            @if (context.TipoVenta == "mesa" || context.TipoVenta == "sesion_billar")
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Style="background: rgba(34, 197, 94, 0.15); color: #4ADE80; font-weight: 700; border: 1px solid rgba(34, 197, 94, 0.3);" Icon="@Icons.Material.Filled.SportsScore">
+                                    Mesa de Billar
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-weight: 700; border: 1px solid rgba(56, 189, 248, 0.3);" Icon="@Icons.Material.Filled.LocalBar">
+                                    Venta Directa POS
+                                </MudChip>
+                            }
+                        </MudTd>
+
+                        <MudTd DataLabel="Cliente">
+                            <div class="d-flex align-center gap-2">
+                                <MudAvatar Size="Size.Small" Style="background: rgba(212, 175, 55, 0.15); color: var(--color-gold); font-size: 11px; font-weight: 700; width: 26px; height: 26px;">
+                                    @(string.IsNullOrWhiteSpace(context.ClienteNombre) ? "C" : context.ClienteNombre.Substring(0, 1).ToUpper())
+                                </MudAvatar>
+                                <span style="font-weight: 600; font-size: 13px; color: var(--text-primary);">
+                                    @(string.IsNullOrWhiteSpace(context.ClienteNombre) ? "Cliente Mostrador" : context.ClienteNombre)
+                                </span>
+                            </div>
+                        </MudTd>
+
+                        <MudTd DataLabel="Desglose">
+                            <div class="d-flex flex-column gap-1" style="font-size: 12px;">
+                                @if (context.SubtotalTiempo > 0)
+                                {
+                                    <span style="color: var(--text-secondary);">
+                                        Tiempo Mesa: <strong class="tabular-nums" style="color: var(--text-primary);">Bs. @context.SubtotalTiempo.ToString("N2")</strong>
+                                    </span>
+                                }
+                                @if (context.SubtotalProductos > 0)
+                                {
+                                    <span style="color: var(--text-secondary);">
+                                        Consumos: <strong class="tabular-nums" style="color: var(--text-primary);">Bs. @context.SubtotalProductos.ToString("N2")</strong>
+                                    </span>
+                                }
+                                @if (context.Descuento > 0)
+                                {
+                                    <span style="color: #F87171;">
+                                        Descuento: -Bs. @context.Descuento.ToString("N2")
+                                    </span>
+                                }
+                                @if (context.SubtotalTiempo == 0 && context.SubtotalProductos == 0 && context.Total > 0)
+                                {
+                                    <span style="color: var(--text-secondary);">
+                                        Importe Neto
+                                    </span>
+                                }
+                            </div>
+                        </MudTd>
+
+                        <MudTd DataLabel="Método de Pago">
+                            @{
+                                var metodo = context.MetodoPagoPrincipal;
+                            }
+                            @if (metodo.StartsWith("Efectivo", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" Icon="@Icons.Material.Filled.Payments">
+                                    Efectivo
+                                </MudChip>
+                            }
+                            else if (metodo.StartsWith("QR", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Icon="@Icons.Material.Filled.QrCode2">
+                                    QR
+                                </MudChip>
+                            }
+                            else if (metodo.StartsWith("Tarjeta", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Icon="@Icons.Material.Filled.CreditCard">
+                                    Tarjeta
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Style="background: rgba(168, 85, 247, 0.2); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.4);" Icon="@Icons.Material.Filled.CallSplit">
+                                    @metodo
+                                </MudChip>
+                            }
+                        </MudTd>
+
+                        <MudTd DataLabel="Total" Style="text-align: right;">
+                            <span class="font-heading tabular-nums" style="font-size: 16px; font-weight: 800; color: var(--color-gold);">
+                                Bs. @context.Total.ToString("N2")
+                            </span>
+                        </MudTd>
+
+                        <MudTd DataLabel="Estado" Style="text-align: center;">
+                            @if (context.Estado == "pagada")
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">
+                                    Pagada
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Filled">
+                                    @context.Estado
+                                </MudChip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+
+                    <ChildRowContent>
+                        @if (_filasExpandidas.Contains(context.Id))
+                        {
+                            <MudTr>
+                                <td colspan="8" class="pa-4" style="background: rgba(16, 27, 22, 0.7); border-bottom: 1px solid var(--border-color);">
+                                    <div class="d-flex flex-column gap-3">
+                                        <div class="d-flex justify-space-between align-center">
+                                            <span style="font-weight: 700; color: var(--color-gold); font-size: 13px;">
+                                                <MudIcon Icon="@Icons.Material.Filled.ListAlt" Size="Size.Small" Class="mr-1" />
+                                                Artículos y Conceptos Cobrados:
+                                            </span>
+                                            <span style="font-size: 11px; color: var(--text-muted); font-family: monospace;">
+                                                ID Venta: @context.Id
+                                            </span>
+                                        </div>
+
+                                        @if (context.Detalles != null && context.Detalles.Count > 0)
+                                        {
+                                            <div class="d-flex flex-column gap-1">
+                                                @foreach (var det in context.Detalles)
+                                                {
+                                                    <div class="d-flex justify-space-between align-center pa-2 rounded" style="background: rgba(28, 41, 35, 0.5); font-size: 12px;">
+                                                        <div class="d-flex align-center gap-2">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Tertiary" />
+                                                            <span style="color: var(--text-primary); font-weight: 600;">@det.Concepto</span>
+                                                            <span style="color: var(--text-secondary);">x @det.Cantidad</span>
+                                                        </div>
+                                                        <div class="d-flex align-center gap-3">
+                                                            <span style="color: var(--text-secondary);">(P. Unit: Bs. @det.PrecioUnitario.ToString("N2"))</span>
+                                                            <span class="tabular-nums" style="color: var(--color-gold); font-weight: 700;">Bs. @det.Subtotal.ToString("N2")</span>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">
+                                                No se registraron líneas de detalle individuales para esta venta.
+                                            </div>
+                                        }
+
+                                        @if (context.Pagos != null && context.Pagos.Count > 0)
+                                        {
+                                            <div class="d-flex flex-wrap gap-2 pt-2 align-center" style="border-top: 1px dashed var(--border-color); font-size: 12px;">
+                                                <span style="color: var(--text-secondary); font-weight: 600;">Comprobantes de Pago:</span>
+                                                @foreach (var p in context.Pagos)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary">
+                                                        @(p.MetodoPago.ToUpper()): Bs. @p.Monto.ToString("N2") @(!string.IsNullOrEmpty(p.ReferenciaComprobante) ? $"({p.ReferenciaComprobante})" : "")
+                                                    </MudChip>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                            </MudTr>
+                        }
+                    </ChildRowContent>
+                </MudTable>
+            </div>
+        }
+    </div>
 </div>
 
 @code {
     private CajaModel? _caja;
     private List<MesaModel> _mesas = new();
+    private List<VentaModel> _ultimasVentas = new();
+    private bool _cargando = true;
+    private HashSet<Guid> _filasExpandidas = new();
 
     private decimal TotalRecaudado => (_caja?.MontoVentasEfectivo ?? 0) + (_caja?.MontoVentasQr ?? 0) + (_caja?.MontoVentasTarjeta ?? 0);
     private int PorcentajeOcupacion => _mesas.Count > 0 ? (int)Math.Round((double)_mesas.Count(m => m.Estado == "ocupada") / _mesas.Count * 100) : 0;
@@ -129,7 +399,48 @@
 
     private async Task CargarReportesAsync()
     {
-        _caja = await Supabase.GetCajaAbiertaAsync();
-        _mesas = await Supabase.GetMesasAsync();
+        _cargando = true;
+        try
+        {
+            _caja = await Supabase.GetCajaAbiertaAsync();
+            _mesas = await Supabase.GetMesasAsync();
+            _ultimasVentas = await Supabase.GetUltimasVentasAsync(10);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cargando reportes: {ex.Message}");
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void ToggleExpandir(Guid ventaId)
+    {
+        if (_filasExpandidas.Contains(ventaId))
+            _filasExpandidas.Remove(ventaId);
+        else
+            _filasExpandidas.Add(ventaId);
+    }
+
+    private bool _exportando;
+
+    private async Task ExportarReporteAExcelAsync()
+    {
+        try
+        {
+            _exportando = true;
+            await ExcelService.ExportarReporteFinancieroAsync(_caja, _mesas, _ultimasVentas);
+            Snackbar.Add("Reporte financiero exportado a Excel exitosamente.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al exportar reporte a Excel: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exportando = false;
+        }
     }
 }

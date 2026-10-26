@@ -16,6 +16,7 @@ public class SupabaseService
 
     public event Action? OnMesasUpdated;
     public event Action? OnAuthStateChange;
+    public event Action? OnCajaUpdated;
 
     public SupabaseService(IConfiguration config, IJSRuntime jsRuntime)
     {
@@ -172,6 +173,13 @@ public class SupabaseService
                 (sender, change) => OnMesasUpdated?.Invoke()
             );
             await channel.Subscribe();
+
+            var channelCajas = _client.Realtime.Channel("public-cajas");
+            channelCajas.AddPostgresChangeHandler(
+                Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All,
+                (sender, change) => OnCajaUpdated?.Invoke()
+            );
+            await channelCajas.Subscribe();
         }
         catch (Exception ex)
         {
@@ -902,6 +910,71 @@ public class SupabaseService
         }
     }
 
+    public async Task<List<VentaModel>> GetUltimasVentasAsync(int limite = 10)
+    {
+        try
+        {
+            var response = await Client.From<VentaModel>()
+                .Order(v => v.CreadoEn, Supabase.Postgrest.Constants.Ordering.Descending)
+                .Limit(limite)
+                .Get();
+
+            var ventas = response.Models;
+            if (ventas.Count == 0) return ventas;
+
+            var ventaIds = ventas.Select(v => v.Id.ToString()).ToList();
+
+            // Cargar pagos asociados
+            try
+            {
+                var pagosRes = await Client.From<PagoModel>()
+                    .Filter("venta_id", Supabase.Postgrest.Constants.Operator.In, ventaIds)
+                    .Get();
+
+                var pagosPorVenta = pagosRes.Models.GroupBy(p => p.VentaId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var v in ventas)
+                {
+                    if (pagosPorVenta.TryGetValue(v.Id, out var pagos))
+                    {
+                        v.Pagos = pagos;
+                    }
+                }
+            }
+            catch (Exception exPagos)
+            {
+                Console.WriteLine($"Aviso cargando pagos de ventas: {exPagos.Message}");
+            }
+
+            // Cargar detalles de venta asociados
+            try
+            {
+                var detallesRes = await Client.From<DetalleVentaModel>()
+                    .Filter("venta_id", Supabase.Postgrest.Constants.Operator.In, ventaIds)
+                    .Get();
+
+                var detallesPorVenta = detallesRes.Models.GroupBy(d => d.VentaId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var v in ventas)
+                {
+                    if (detallesPorVenta.TryGetValue(v.Id, out var detalles))
+                    {
+                        v.Detalles = detalles;
+                    }
+                }
+            }
+            catch (Exception exDet)
+            {
+                Console.WriteLine($"Aviso cargando detalles de ventas: {exDet.Message}");
+            }
+
+            return ventas;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error obteniendo ultimas ventas: {ex.Message}");
+            return new List<VentaModel>();
+        }
+    }
+
     // =========================================================================
     // PRODUCTOS Y CATEGORIAS
     // =========================================================================
@@ -1087,6 +1160,7 @@ public class SupabaseService
             };
 
             await Client.Rpc("abrir_caja", parameters);
+            OnCajaUpdated?.Invoke();
             return true;
         }
         catch (Exception ex)
@@ -1110,6 +1184,7 @@ public class SupabaseService
             };
 
             await Client.Rpc("cerrar_caja", parameters);
+            OnCajaUpdated?.Invoke();
             return true;
         }
         catch (Exception ex)

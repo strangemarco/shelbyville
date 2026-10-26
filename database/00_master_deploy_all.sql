@@ -812,6 +812,7 @@ DECLARE
     v_consumo RECORD;
     v_monto_total NUMERIC(10,2);
     v_cambio NUMERIC(10,2) := 0.00;
+    v_calculo JSONB;
 
     -- Variables para pago mixto
     v_ref_json JSONB;
@@ -821,13 +822,43 @@ DECLARE
     v_ref_texto VARCHAR := NULL;
 BEGIN
     SELECT * INTO v_sesion FROM public.sesiones_billar WHERE id = p_sesion_id FOR UPDATE;
-    IF NOT FOUND OR v_sesion.estado <> 'finalizada' THEN
-        RAISE EXCEPTION 'La sesión no existe o no ha sido finalizada para cobro.';
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La sesión no existe.';
+    END IF;
+
+    IF v_sesion.estado NOT IN ('activa', 'pausada', 'pendiente_pago') THEN
+        RAISE EXCEPTION 'La sesión ya no está disponible para cobro (Estado actual: %).', v_sesion.estado;
     END IF;
 
     SELECT * INTO v_caja FROM public.cajas WHERE id = p_caja_id FOR UPDATE;
     IF NOT FOUND OR v_caja.estado <> 'abierta' THEN
         RAISE EXCEPTION 'La caja especificada no está abierta.';
+    END IF;
+
+    -- Si estaba pausada, cerrar la pausa abierta
+    IF v_sesion.estado = 'pausada' THEN
+        UPDATE public.pausas_sesion 
+        SET hora_fin = NOW(),
+            duracion_segundos = EXTRACT(EPOCH FROM (NOW() - hora_inicio))::INT
+        WHERE sesion_id = p_sesion_id AND hora_fin IS NULL;
+    END IF;
+
+    -- Si estaba activa o pausada, congelar tiempo y calcular montos finales
+    IF v_sesion.estado IN ('activa', 'pausada') THEN
+        UPDATE public.sesiones_billar
+        SET hora_fin = NOW(),
+            usuario_cierre_id = p_usuario_id
+        WHERE id = p_sesion_id;
+
+        v_calculo := public.calcular_tiempo_y_monto_sesion(p_sesion_id);
+
+        UPDATE public.sesiones_billar
+        SET minutos_cobrables = (v_calculo->>'minutos_cobrables')::INT,
+            monto_tiempo = (v_calculo->>'monto_tiempo')::NUMERIC,
+            monto_total = (v_calculo->>'monto_total')::NUMERIC
+        WHERE id = p_sesion_id;
+
+        SELECT * INTO v_sesion FROM public.sesiones_billar WHERE id = p_sesion_id;
     END IF;
 
     v_monto_total := GREATEST(0.00, (v_sesion.monto_tiempo + v_sesion.monto_consumos) - COALESCE(p_descuento, 0.00));
@@ -1029,16 +1060,18 @@ BEGIN
         );
     END IF;
 
-    -- 5. Marcar sesión como pagada
+    -- 5. Marcar sesión como finalizada
     UPDATE public.sesiones_billar 
-    SET estado = 'pagada',
-        monto_total = v_monto_total
+    SET estado = 'finalizada',
+        monto_descuento = COALESCE(p_descuento, 0.00),
+        monto_total = v_monto_total,
+        actualizado_en = NOW()
     WHERE id = p_sesion_id;
 
     -- 6. Liberar la mesa físicamente
     UPDATE public.mesas 
     SET estado = 'disponible',
-        sesion_actual_id = NULL
+        actualizado_en = NOW()
     WHERE id = v_sesion.mesa_id;
 
     RETURN jsonb_build_object(
