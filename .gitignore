@@ -11,15 +11,12 @@
 [Oo]bj/
 bin/
 obj/
-output/
-dotnet/
-dotnet-install.sh
 
-## Configurations and Credentials
+## Secret Configurations and Credentials
+**/appsettings.json
 **/appsettings.Development.json
 **/appsettings.*.json
 !**/appsettings.example.json
-!**/appsettings.json
 *.env
 *.env.*
 

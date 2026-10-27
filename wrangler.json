@@ -1,8 +1,0 @@
-{
-  "name": "shelbyville",
-  "compatibility_date": "2024-11-01",
-  "assets": {
-    "directory": "output/wwwroot",
-    "not_found_handling": "single-page-application"
-  }
-}
