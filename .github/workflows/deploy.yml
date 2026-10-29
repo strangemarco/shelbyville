@@ -25,12 +25,10 @@ jobs:
       - name: Copy vercel.json to build output
         run: cp vercel.json dist/wwwroot/
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-          working-directory: dist/wwwroot
+      - name: Configure Vercel Project
+        run: |
+          mkdir -p dist/wwwroot/.vercel
+          echo '{"orgId":"${{ secrets.VERCEL_ORG_ID }}","projectId":"${{ secrets.VERCEL_PROJECT_ID }}"}' > dist/wwwroot/.vercel/project.json
 
+      - name: Deploy to Vercel
+        run: npx --yes vercel deploy dist/wwwroot --prod --token="${{ secrets.VERCEL_TOKEN }}" --yes
