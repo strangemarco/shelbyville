@@ -21,6 +21,7 @@ obj/
 *.env.*
 
 ## OS Generated Files
+.vercel
 .DS_Store
 Thumbs.db
 *.log
